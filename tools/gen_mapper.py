@@ -54,13 +54,78 @@ def gen_function_spec(src_type: str, dst_type: str) -> str:
 
 
 def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
-                      dst_field_types: dict[str, str]) -> str:
-    # fields: { dest_field: src_field }
+                      types_from_ads: Path, types_to_ads: Path,
+                      mapping_pairs: set[tuple[str, str]]) -> str:
+    """Generate body for Map(X: From) return To with nested support.
+
+    Strategy:
+    - For each destination field, if its type is a record in Types_To and the
+      corresponding source field type is a record in Types_From, emit a nested
+      aggregate mapping subfields by name (cast each leaf to dest type).
+    - Otherwise, emit a direct cast to the destination field type.
+    """
+    dst_field_types = parse_record_components(types_to_ads, dst_type)
+    src_field_types = parse_record_components(types_from_ads, src_type)
+
+    # Cache for parsed types to avoid rereading files repeatedly
+    parsed_to: dict[str, dict[str, str]] = {dst_type: dst_field_types}
+    parsed_from: dict[str, dict[str, str]] = {src_type: src_field_types}
+
+    def get_to_fields(tname: str) -> dict[str, str] | None:
+        if tname in parsed_to:
+            return parsed_to[tname]
+        try:
+            fields = parse_record_components(types_to_ads, tname)
+        except Exception:
+            fields = None
+        if fields is not None:
+            parsed_to[tname] = fields
+        return fields
+
+    def get_from_fields(tname: str) -> dict[str, str] | None:
+        if tname in parsed_from:
+            return parsed_from[tname]
+        try:
+            fields = parse_record_components(types_from_ads, tname)
+        except Exception:
+            fields = None
+        if fields is not None:
+            parsed_from[tname] = fields
+        return fields
+
+    def value_expr(dst_t: str, src_t: str | None, src_expr: str) -> str:
+        # If both are records, build nested aggregate by matching field names
+        to_fields = get_to_fields(dst_t) if dst_t else None
+        from_fields = get_from_fields(src_t) if src_t else None
+        if to_fields and from_fields:
+            # If there is an explicit mapping for these record types, delegate
+            if src_t and dst_t and (src_t.strip(), dst_t.strip()) in mapping_pairs:
+                return f"Map({src_expr})"
+            parts: list[str] = []
+            for d_name, d_ftype in to_fields.items():
+                s_name = d_name if d_name in from_fields else None
+                if not s_name:
+                    # Fallback: try lowercase match
+                    lf = {k.lower(): k for k in from_fields.keys()}
+                    s_name = lf.get(d_name.lower())
+                if not s_name:
+                    # No source field; emit default aggregate with null record? Not possible in Ada; cast from src_expr as last resort
+                    parts.append(f"{d_name} => {d_ftype} ({src_expr})")
+                    continue
+                s_ftype = from_fields[s_name]
+                sub_expr = value_expr(d_ftype, s_ftype, f"{src_expr}.{s_name}")
+                parts.append(f"{d_name} => {sub_expr}")
+            return f"( {', '.join(parts)} )"
+        # Scalar or unmatched: cast to destination type if available
+        return f"{dst_t} ({src_expr})" if dst_t else src_expr
+
     associations = []
     for dest, src in fields.items():
-        dst_t = dst_field_types.get(dest)
-        expr = f"X.{src}" if not dst_t else f"{dst_t} (X.{src})"
+        d_t = dst_field_types.get(dest)
+        s_t = src_field_types.get(src)
+        expr = value_expr(d_t, s_t, f"X.{src}")
         associations.append(f"{dest} => {expr}")
+
     joined = ",\n       ".join(associations)
     return (
         f"   function Map (X : Types_From.{src_type}) return Types_To.{dst_type} is\n"
@@ -85,18 +150,21 @@ def main():
     spec_parts = [SPEC_TEMPLATE_HEADER]
     body_parts = [BODY_TEMPLATE_HEADER]
 
-    # Parse destination record field types from Types_To
+    types_from_ads = Path("src/types_from.ads")
     types_to_ads = Path("src/types_to.ads")
+
+    # Build a set of known mapping type pairs for nested delegation
+    mapping_pairs: set[tuple[str, str]] = set(
+        (m.get("from"), m.get("to")) for m in mappings if m.get("from") and m.get("to")
+    )
 
     for m in mappings:
         src_type = m["from"]
         dst_type = m["to"]
         fields = m["fields"]
 
-        dst_field_types = parse_record_components(types_to_ads, dst_type)
-
         spec_parts.append(gen_function_spec(src_type, dst_type))
-        body_parts.append(gen_function_body(src_type, dst_type, fields, dst_field_types))
+        body_parts.append(gen_function_body(src_type, dst_type, fields, types_from_ads, types_to_ads, mapping_pairs))
 
     spec_parts.append(SPEC_TEMPLATE_FOOTER)
     body_parts.append(BODY_TEMPLATE_FOOTER)

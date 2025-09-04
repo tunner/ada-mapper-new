@@ -6,9 +6,19 @@
       "to": "T_Position_To_Station",
       "fields": {
         "Lat": "Latitude",
-        "Long": "Longitude"
+        "Long": "Longitude",
+        "Speed": "Speed"
+      }
+    },
+    {
+      "name": "Speed",
+      "from": "T_Speed",
+      "to": "T_Speed",
+      "fields": {
+        "North": "North",
+        "East": "East",
+        "Down": "Down"
       }
     }
   ]
 }
-
