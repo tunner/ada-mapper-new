@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Ada build artifacts
+obj/
+*.o
+*.ali
+*.bexch
+b__*.adb
+b__*.ads
+*.stderr
+*.stdout
+
+# Editors/IDE (keep VS Code config tracked)
+!.vscode/
