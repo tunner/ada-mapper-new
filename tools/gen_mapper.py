@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from parser import parse_record_components
 
 
 SPEC_TEMPLATE_HEADER = """with Types_From;
@@ -52,53 +53,13 @@ def gen_function_spec(src_type: str, dst_type: str) -> str:
     return f"   function Map (X : Types_From.{src_type}) return Types_To.{dst_type};\n"
 
 
-def parse_record_components(ads_path: Path, type_name: str) -> dict[str, str]:
-    """Very simple parser: extract field -> type from a record definition.
-    Assumes single package file with 'type <Name> is record' ... 'end record;'.
-    """
-    text = ads_path.read_text()
-    import re
-    # Find the record block for the given type
-    start_re = re.compile(rf"\btype\s+{re.escape(type_name)}\s+is\s+record\b", re.IGNORECASE)
-    end_re = re.compile(r"\bend\s+record\s*;", re.IGNORECASE)
-    field_re = re.compile(r"^\s*([A-Za-z]\w*)\s*:\s*([^;]+);\s*$")
-
-    in_block = False
-    fields: dict[str, str] = {}
-    for line in text.splitlines():
-        if not in_block:
-            if start_re.search(line):
-                in_block = True
-            continue
-        # inside block
-        if end_re.search(line):
-            break
-        m = field_re.match(line)
-        if m:
-            fname = m.group(1).strip()
-            ftype = m.group(2).strip()
-            fields[fname] = ftype
-    if not fields:
-        raise RuntimeError(f"Could not parse fields for type {type_name} in {ads_path}")
-    return fields
-
-
 def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
-                      src_field_types: dict[str, str], dst_field_types: dict[str, str]) -> str:
+                      dst_field_types: dict[str, str]) -> str:
     # fields: { dest_field: src_field }
     associations = []
     for dest, src in fields.items():
         dst_t = dst_field_types.get(dest)
-        src_t = src_field_types.get(src)
-        if dst_t is None or src_t is None:
-            # Fallback: no type info, no cast
-            expr = f"X.{src}"
-        elif dst_t.strip() == src_t.strip():
-            expr = f"X.{src}"
-        else:
-            # Inline type conversion to destination field type
-            # Use the raw type text as a type mark (assumes it is visible via with/use)
-            expr = f"{dst_t} (X.{src})"
+        expr = f"X.{src}" if not dst_t else f"{dst_t} (X.{src})"
         associations.append(f"{dest} => {expr}")
     joined = ",\n       ".join(associations)
     return (
@@ -124,8 +85,7 @@ def main():
     spec_parts = [SPEC_TEMPLATE_HEADER]
     body_parts = [BODY_TEMPLATE_HEADER]
 
-    # Pre-parse component types for involved records
-    types_from_ads = Path("src/types_from.ads")
+    # Parse destination record field types from Types_To
     types_to_ads = Path("src/types_to.ads")
 
     for m in mappings:
@@ -133,12 +93,10 @@ def main():
         dst_type = m["to"]
         fields = m["fields"]
 
-        # Parse field types
-        src_field_types = parse_record_components(types_from_ads, src_type)
         dst_field_types = parse_record_components(types_to_ads, dst_type)
 
         spec_parts.append(gen_function_spec(src_type, dst_type))
-        body_parts.append(gen_function_body(src_type, dst_type, fields, src_field_types, dst_field_types))
+        body_parts.append(gen_function_body(src_type, dst_type, fields, dst_field_types))
 
     spec_parts.append(SPEC_TEMPLATE_FOOTER)
     body_parts.append(BODY_TEMPLATE_FOOTER)
