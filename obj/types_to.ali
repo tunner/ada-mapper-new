@@ -1,0 +1,26 @@
+V "GNAT Lib v15"
+A -gnatA
+A -mmacosx-version-min=15.0.0
+A -mcpu=apple-m1
+A -mlittle-endian
+A -mabi=lp64
+A -fPIC
+P ZX
+
+RN
+RV NO_FLOATING_POINT
+RV NO_IMPLEMENTATION_PRAGMAS
+
+U types_to%s		types_to.ads		b9df354b NE OO PK
+
+D system.ads		20250419085653 70765b54 system%s
+D types_to.ads		20250904200639 b9df354b types_to%s
+G a e
+G c Z s s [t_position_to_stationIP types_to 3 9 none]
+X 2 types_to.ads
+1K9*Types_To 7l5 7e13
+2F9*Float16<short_float> 4r14 5r14
+3R9*T_Position_To_Station 6e14
+4f7*Lat{2F9}
+5f7*Long{2F9}
+

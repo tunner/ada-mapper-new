@@ -1,0 +1,44 @@
+we need to map two different Ada records 
+
+e.g.
+
+type t_position_from_gps is
+   record
+	  latitude  : Float
+	  longitude : Float
+   end record;	
+
+type t_position_to_station is
+   record	
+	  lat  : Float
+	  long : Float
+   end record;
+
+Mapping:
+   latitude  <-> lat
+   longitude <-> long
+
+position_from_gps : t_position_from_gps(latitude => 12.34, longitude => 56.78);
+position_to_station: t_position_from_gps := C_Map(position_from_gps);
+
+---
+
+Example mappings.json
+
+{
+  "mappings": [
+    {
+      "name": "Position_From_GPS_To_Station",
+      "from": "T_Position_From_GPS",
+      "to": "T_Position_To_Station",
+      "fields": {
+        "Lat": "Latitude",
+        "Long": "Longitude"
+      }
+    }
+  ]
+}
+
+Notes
+- The JSON only declares field name correspondences; it omits types and conversions.
+- Generated mappers call a central `Convert` function per field; Ada resolves the correct overload from source/destination types.

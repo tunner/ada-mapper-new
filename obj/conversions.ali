@@ -1,0 +1,40 @@
+V "GNAT Lib v15"
+A -gnatA
+A -mmacosx-version-min=15.0.0
+A -mcpu=apple-m1
+A -mlittle-endian
+A -mabi=lp64
+A -fPIC
+P ZX
+
+RN
+RV NO_FLOATING_POINT
+RV NO_IMPLEMENTATION_PRAGMAS
+
+U conversions%b		conversions.adb		57ee47c3 NE OO PK
+
+U conversions%s		conversions.ads		feadbc58 EE NE OO PK
+W types_from%s		types_from.ads		types_from.ali
+W types_to%s		types_to.ads		types_to.ali
+
+D conversions.ads	20250904200711 bdf8bf9a conversions%s
+D conversions.adb	20250904200650 ea16f859 conversions%b
+D system.ads		20250419085653 70765b54 system%s
+D types_from.ads	20250904200634 fa8a3689 types_from%s
+D types_to.ads		20250904200639 b9df354b types_to%s
+G a e
+G c Z s b [convert conversions 6 13 none]
+G c Z s b [convert conversions 8 13 none]
+X 1 conversions.ads
+4K9*Conversions 9l5 9e16 2|1b14 5l5 5t16
+6V13*Convert{float} 6>22 2|2b13
+6f22 X{float} 2|2r50
+8V13*Convert{5|2F9} 8>22 2|3b13
+8f22 X{4|2F9} 2|4r25
+X 4 types_from.ads
+1K9*Types_From 1|1w6 8r26 2|3r26 4|7e15
+2F9*Float32<long_float> 1|8r37 2|3r37
+X 5 types_to.ads
+1K9*Types_To 1|2w6 8r53 2|3r53 4r7 5|7e13
+2F9*Float16<short_float> 1|8r62 2|3r62 4r16
+

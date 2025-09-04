@@ -1,0 +1,20 @@
+[GENERATED OBJECT FILE]
+b__main.o
+[PROJECT FILES]
+/Users/lucacorletto/Dev/EMS/ada-mapper-new/ada_mapper.gpr
+20250904161215 7d31f4ce37bf42304e2965aa9aed583f
+[BOUND OBJECT FILES]
+/Users/lucacorletto/Dev/EMS/ada-mapper-new/obj/types_from.o
+/Users/lucacorletto/Dev/EMS/ada-mapper-new/obj/types_to.o
+/Users/lucacorletto/Dev/EMS/ada-mapper-new/obj/position_mappers.o
+/Users/lucacorletto/Dev/EMS/ada-mapper-new/obj/main.o
+[GENERATED SOURCE FILES]
+b__main.ads
+b__main.adb
+b__main.ali
+[RESULTING OPTIONS]
+-L/Users/lucacorletto/Dev/EMS/ada-mapper-new/obj/
+-L/Users/lucacorletto/Dev/EMS/ada-mapper-new/obj/
+-L/users/lucacorletto/.local/share/alire/toolchains/gnat_native_15.1.2_60748c54/lib/gcc/aarch64-apple-darwin23.6.0/15.0.1/adalib/
+-static
+/users/lucacorletto/.local/share/alire/toolchains/gnat_native_15.1.2_60748c54/lib/gcc/aarch64-apple-darwin23.6.0/15.0.1/adalib/libgnat.a

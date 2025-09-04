@@ -1,0 +1,20 @@
+V "GNAT Lib v15"
+P ZX
+
+RN
+RV NO_FLOATING_POINT
+
+U conversions%b		conversions.adb		e338026e NE OO PK
+
+U conversions%s		conversions.ads		34563d7c EE NE OO PK
+
+D conversions.ads	20250904160107 34563d7c conversions%s
+D conversions.adb	20250904160113 d76e3f12 conversions%b
+D system.ads		20250419085653 70765b54 system%s
+G a e
+G c Z s b [convert conversions 3 13 none]
+X 1 conversions.ads
+1K9*Conversions 4l5 4e16 2|1b14 3l5 3t16
+3V13*Convert{float} 3>22 2|2b13
+3f22 X{float} 2|2r50
+

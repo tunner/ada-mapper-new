@@ -1,0 +1,45 @@
+V "GNAT Lib v15"
+A -gnatA
+A -mmacosx-version-min=15.0.0
+A -mcpu=apple-m1
+A -mlittle-endian
+A -mabi=lp64
+A -fPIC
+P ZX
+
+RN
+RV NO_FLOATING_POINT
+RV NO_IMPLEMENTATION_PRAGMAS
+
+U position_mappers%b	position_mappers.adb	4926842e NE OO PK
+W types_from%s		types_from.ads		types_from.ali
+W types_to%s		types_to.ads		types_to.ali
+
+U position_mappers%s	position_mappers.ads	4189d1b0 EE NE OO PK
+W types_from%s		types_from.ads		types_from.ali
+W types_to%s		types_to.ads		types_to.ali
+
+D position_mappers.ads	20250904201107 02dcd272 position_mappers%s
+D position_mappers.adb	20250904201107 08af559e position_mappers%b
+D system.ads		20250419085653 70765b54 system%s
+D types_from.ads	20250904200634 fa8a3689 types_from%s
+D types_to.ads		20250904200639 b9df354b types_to%s
+G a e
+G c Z s b [map position_mappers 6 13 none]
+X 1 position_mappers.ads
+4K9*Position_Mappers 8l5 8e21 2|4b14 10l5 10t21
+6V13*Map{5|3R9} 6>18 2|6b13
+6r18 X{4|3R9} 2|7r24 8r25
+X 4 types_from.ads
+1K9*Types_From 1|1w6 6r22 2|1w6 1r22 6r22 4|7e15
+2F9*Float32<long_float>
+3R9*T_Position_From_GPS 1|6r33 2|6r33 4|6e14
+4f7*Latitude{2F9} 2|7r26
+5f7*Longitude{2F9} 2|8r27
+X 5 types_to.ads
+1K9*Types_To 1|2w6 6r61 2|2w6 2r22 6r61 5|7e13
+2F9*Float16<short_float> 2|7r15 8r16
+3R9*T_Position_To_Station 1|6r70 2|6r70 5|6e14
+4f7*Lat{2F9} 2|7m8
+5f7*Long{2F9} 2|8m8
+

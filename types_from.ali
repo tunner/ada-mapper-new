@@ -1,0 +1,19 @@
+V "GNAT Lib v15"
+P ZX
+
+RN
+RV NO_FLOATING_POINT
+
+U types_from%s		types_from.ads		fa8a3689 NE OO PK
+
+D system.ads		20250419085653 70765b54 system%s
+D types_from.ads	20250904200634 fa8a3689 types_from%s
+G a e
+G c Z s s [t_position_from_gpsIP types_from 3 9 none]
+X 2 types_from.ads
+1K9*Types_From 7l5 7e15
+2F9*Float32<long_float> 4r19 5r19
+3R9*T_Position_From_GPS 6e14
+4f7*Latitude{2F9}
+5f7*Longitude{2F9}
+
