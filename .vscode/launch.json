@@ -14,7 +14,20 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "env": {}
+    },
+    {
+      "name": "Python: Generate + Validate",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/gen_mapper.py",
+      "args": [
+        "${workspaceFolder}/mappings.json",
+        "${workspaceFolder}/src",
+        "--validate"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
     }
   ]
 }
-

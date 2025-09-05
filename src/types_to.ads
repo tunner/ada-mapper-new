@@ -12,8 +12,8 @@ package Types_To is
    end record;
 
    Type T_Position is record
-      Latitude  : T_Integer16;
-      Longitude : T_Integer16;
+      Lat  : T_Integer16;
+      Lon : T_Integer16;
    end record;
 
    type T_Satellite is record

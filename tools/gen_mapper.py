@@ -19,7 +19,9 @@ Defaults:
 """
 from __future__ import annotations
 
+import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 from parser import parse_record_components
@@ -141,9 +143,52 @@ def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
     )
 
 
+def run_compile(outdir: Path) -> int:
+    """Compile the generated mapper to validate syntax.
+
+    Tries `gnatmake` directly; if unavailable, tries `alr exec`.
+    Returns the subprocess return code.
+    """
+    mapper = outdir / "position_mappers.adb"
+    cmd = ["gnatmake", "-q", "-c", f"-I{outdir}", str(mapper)]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            print("Validation: mapper compiles (gnatmake).")
+            return 0
+        else:
+            sys.stderr.write(res.stdout)
+            sys.stderr.write(res.stderr)
+    except FileNotFoundError:
+        pass
+
+    # Fallback via Alire if available
+    cmd = [
+        "alr", "-n", "-q", "exec", "--",
+        "gnatmake", "-q", "-c", f"-I{outdir}", str(mapper),
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            print("Validation: mapper compiles (alr exec).")
+        else:
+            sys.stderr.write(res.stdout)
+            sys.stderr.write(res.stderr)
+        return res.returncode
+    except FileNotFoundError:
+        print("Validation skipped: neither gnatmake nor alr found on PATH.")
+        return 127
+
+
 def main():
-    mappings_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("mappings.json")
-    outdir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("src")
+    parser = argparse.ArgumentParser(description="Generate Ada mappers from JSON.")
+    parser.add_argument("mappings", nargs="?", default="mappings.json", help="Path to mappings.json")
+    parser.add_argument("outdir", nargs="?", default="src", help="Output directory (default: src)")
+    parser.add_argument("--validate", action="store_true", help="Compile generated mapper to validate syntax")
+    args = parser.parse_args()
+
+    mappings_path = Path(args.mappings)
+    outdir = Path(args.outdir)
 
     spec_path = outdir / "position_mappers.ads"
     body_path = outdir / "position_mappers.adb"
@@ -240,6 +285,11 @@ def main():
 
     print(f"Wrote {spec_path}")
     print(f"Wrote {body_path}")
+
+    if args.validate:
+        code = run_compile(outdir)
+        if code != 0 and code != 127:
+            sys.exit(code)
 
 
 if __name__ == "__main__":
