@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
 
-from parser import parse_record_components
+from records import parse_record_components
 from arrays import parse_array_component_type
 
 
@@ -157,46 +157,4 @@ class MapperGenerator:
                             self.needed_array_maps.add(pair)
                             changed = True
 
-    # Emit array map spec line
-    @staticmethod
-    def array_map_spec(src_arr: str, dst_arr: str) -> str:
-        return f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr};\n"
-
-    # Emit array map body
-    def array_map_body(self, src_arr: str, dst_arr: str) -> str:
-        src_elem = self.from_array_elem(src_arr) or ""
-        dst_elem = self.to_array_elem(dst_arr) or ""
-        elem_expr = f"{dst_elem} (A(I))" if dst_elem else "A(I)"
-        to_elem2 = self.to_array_elem(dst_elem) if dst_elem else None
-        from_elem2 = self.from_array_elem(src_elem) if src_elem else None
-        if (src_elem, dst_elem) in self.mapping_pairs or (src_elem, dst_elem) in self.needed_array_maps:
-            elem_expr = "Map(A(I))"
-        elif to_elem2 and from_elem2:
-            elem_expr = "Map(A(I))"
-        else:
-            try:
-                to_fields = self.get_to_fields(dst_elem) or {}
-                from_fields = self.get_from_fields(src_elem) or {}
-                if to_fields and from_fields:
-                    parts = []
-                    for d_name, d_ftype in to_fields.items():
-                        s_name = d_name if d_name in from_fields else next((k for k in from_fields if k.lower() == d_name.lower()), None)
-                        if not s_name:
-                            parts.append(f"{d_name} => {dst_elem} (A(I))")
-                            continue
-                        parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
-                    elem_expr = f"( {', '.join(parts)} )"
-            except Exception:
-                pass
-
-        return (
-            f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr} is\n"
-            f"      R : Types_To.{dst_arr};\n"
-            f"   begin\n"
-            f"      for I in R'Range loop\n"
-            f"         R(I) := {elem_expr};\n"
-            f"      end loop;\n"
-            f"      return R;\n"
-            f"   end Map;\n"
-        )
-
+    # Array spec/body are implemented in tools/arrays; this class orchestrates only

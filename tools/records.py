@@ -2,6 +2,8 @@
 """
 Lightweight Ada record parser utilities for the generator.
 
+Module renamed to `records.py` to align with `arrays.py` naming.
+
 Currently provides:
 - parse_record_components(ads_path, type_name) -> {field_name: type_mark}
 
@@ -43,4 +45,3 @@ def parse_record_components(ads_path: Path, type_name: str) -> dict[str, str]:
     if not fields:
         raise RuntimeError(f"Could not parse fields for type {type_name} in {ads_path}")
     return fields
-

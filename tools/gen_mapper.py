@@ -24,8 +24,8 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from parser import parse_record_components
-from arrays import parse_array_component_type
+from records import parse_record_components
+from arrays import parse_array_component_type, array_map_spec, array_map_body
 from generator import MapperGenerator
 
 
@@ -129,13 +129,11 @@ def main():
 
     # Add Map specs for detected array pairs
     for src_arr, dst_arr in sorted(mg.needed_array_maps):
-        spec_parts.append(
-            f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr};\n"
-        )
+        spec_parts.append(array_map_spec(src_arr, dst_arr))
 
     # Emit array Map bodies (element-wise mapping with recursion)
     for src_arr, dst_arr in sorted(mg.needed_array_maps):
-        body_parts.append(mg.array_map_body(src_arr, dst_arr))
+        body_parts.append(array_map_body(mg, src_arr, dst_arr))
     spec_parts.append(SPEC_TEMPLATE_FOOTER)
     body_parts.append(BODY_TEMPLATE_FOOTER)
 
