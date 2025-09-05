@@ -207,8 +207,9 @@ def main():
     spec_parts = [SPEC_TEMPLATE_HEADER]
     body_parts = [BODY_TEMPLATE_HEADER]
 
-    types_from_ads = Path("src/types_from.ads")
-    types_to_ads = Path("src/types_to.ads")
+    # Resolve type spec locations relative to output directory
+    types_from_ads = Path(outdir) / "types_from.ads"
+    types_to_ads = Path(outdir) / "types_to.ads"
 
     # Build a set of known mapping type pairs for nested delegation
     mapping_pairs: set[tuple[str, str]] = set(
