@@ -23,6 +23,7 @@ import json
 import sys
 from pathlib import Path
 from parser import parse_record_components
+from arrays import parse_array_component_type
 
 
 SPEC_TEMPLATE_HEADER = """with Types_From;
@@ -55,7 +56,8 @@ def gen_function_spec(src_type: str, dst_type: str) -> str:
 
 def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
                       types_from_ads: Path, types_to_ads: Path,
-                      mapping_pairs: set[tuple[str, str]]) -> str:
+                      mapping_pairs: set[tuple[str, str]],
+                      needed_array_maps: set[tuple[str, str]]) -> str:
     """Generate body for Map(X: From) return To with nested support.
 
     Strategy:
@@ -116,6 +118,12 @@ def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
                 sub_expr = value_expr(d_ftype, s_ftype, f"{src_expr}.{s_name}")
                 parts.append(f"{d_name} => {sub_expr}")
             return f"( {', '.join(parts)} )"
+        # Arrays: if both are arrays, delegate to Map and register needed pair
+        to_elem = parse_array_component_type(types_to_ads, dst_t) if dst_t else None
+        from_elem = parse_array_component_type(types_from_ads, src_t) if src_t else None
+        if to_elem and from_elem:
+            needed_array_maps.add((src_t.strip(), dst_t.strip()))
+            return f"Map({src_expr})"
         # Scalar or unmatched: cast to destination type if available
         return f"{dst_t} ({src_expr})" if dst_t else src_expr
 
@@ -157,6 +165,7 @@ def main():
     mapping_pairs: set[tuple[str, str]] = set(
         (m.get("from"), m.get("to")) for m in mappings if m.get("from") and m.get("to")
     )
+    needed_array_maps: set[tuple[str, str]] = set()
 
     for m in mappings:
         src_type = m["from"]
@@ -164,8 +173,64 @@ def main():
         fields = m["fields"]
 
         spec_parts.append(gen_function_spec(src_type, dst_type))
-        body_parts.append(gen_function_body(src_type, dst_type, fields, types_from_ads, types_to_ads, mapping_pairs))
+        body_parts.append(
+            gen_function_body(
+                src_type, dst_type, fields,
+                types_from_ads, types_to_ads,
+                mapping_pairs, needed_array_maps,
+            )
+        )
 
+    # Add Map specs for detected array pairs
+    for src_arr, dst_arr in sorted(needed_array_maps):
+        spec_parts.append(
+            f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr};\n"
+        )
+
+    # Emit array Map bodies (element-wise mapping with recursion)
+    def array_map_body(src_arr: str, dst_arr: str) -> str:
+        src_elem = parse_array_component_type(types_from_ads, src_arr) or ""
+        dst_elem = parse_array_component_type(types_to_ads, dst_arr) or ""
+        elem_expr = f"{dst_elem} (A(I))" if dst_elem else "A(I)"
+        # If there is a direct mapping for element types, use it
+        if (src_elem, dst_elem) in mapping_pairs:
+            elem_expr = "Map(A(I))"
+        else:
+            # Arrays of arrays
+            to_elem2 = parse_array_component_type(types_to_ads, dst_elem) if dst_elem else None
+            from_elem2 = parse_array_component_type(types_from_ads, src_elem) if src_elem else None
+            if to_elem2 and from_elem2:
+                needed_array_maps.add((src_elem, dst_elem))
+                elem_expr = "Map(A(I))"
+            else:
+                # Inline record aggregate if elements are records and no explicit mapping
+                try:
+                    to_fields = parse_record_components(types_to_ads, dst_elem)
+                    from_fields = parse_record_components(types_from_ads, src_elem)
+                    parts: list[str] = []
+                    for d_name, d_ftype in to_fields.items():
+                        s_name = d_name if d_name in from_fields else next((k for k in from_fields if k.lower() == d_name.lower()), None)
+                        if not s_name:
+                            parts.append(f"{d_name} => {dst_elem} (A(I))")
+                            continue
+                        parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
+                    elem_expr = f"( {', '.join(parts)} )"
+                except Exception:
+                    pass
+
+        return (
+            f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr} is\n"
+            f"      R : Types_To.{dst_arr};\n"
+            f"   begin\n"
+            f"      for I in R'Range loop\n"
+            f"         R(I) := {elem_expr};\n"
+            f"      end loop;\n"
+            f"      return R;\n"
+            f"   end Map;\n"
+        )
+
+    for src_arr, dst_arr in sorted(needed_array_maps):
+        body_parts.append(array_map_body(src_arr, dst_arr))
     spec_parts.append(SPEC_TEMPLATE_FOOTER)
     body_parts.append(BODY_TEMPLATE_FOOTER)
 

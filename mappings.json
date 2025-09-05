@@ -5,8 +5,27 @@
       "from": "T_Position_From_GPS",
       "to": "T_Position_To_Station",
       "fields": {
-        "Lat": "Latitude",
-        "Long": "Longitude",
+        "Position": "Position",
+        "Speed": "Speed",
+        "Satellites": "Satellites"
+      }
+    },
+    {
+      "name": "Position",
+      "from": "T_Position",
+      "to": "T_Position",
+      "fields": {
+        "Latitude": "Latitude",
+        "Longitude": "Longitude"
+      }
+    },
+    {
+      "name": "Satellite",
+      "from": "T_Satellite",
+      "to": "T_Satellite",
+      "fields": {
+        "ID": "ID",
+        "Position": "Position",
         "Speed": "Speed"
       }
     },
