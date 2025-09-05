@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from parser import parse_record_components
 from arrays import parse_array_component_type
+from generator import MapperGenerator
 
 
 SPEC_TEMPLATE_HEADER = """with Types_From;
@@ -56,110 +57,8 @@ def gen_function_spec(src_type: str, dst_type: str) -> str:
     return f"   function Map (X : Types_From.{src_type}) return Types_To.{dst_type};\n"
 
 
-def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
-                      types_from_ads: Path, types_to_ads: Path,
-                      mapping_pairs: set[tuple[str, str]],
-                      needed_array_maps: set[tuple[str, str]]) -> str:
-    """Generate body for Map(X: From) return To with nested support.
-
-    Strategy:
-    - For each destination field, if its type is a record in Types_To and the
-      corresponding source field type is a record in Types_From, emit a nested
-      aggregate mapping subfields by name (cast each leaf to dest type).
-    - Otherwise, emit a direct cast to the destination field type.
-    """
-    dst_field_types = parse_record_components(types_to_ads, dst_type)
-    src_field_types = parse_record_components(types_from_ads, src_type)
-
-    # Cache for parsed types to avoid rereading files repeatedly
-    parsed_to: dict[str, dict[str, str]] = {dst_type: dst_field_types}
-    parsed_from: dict[str, dict[str, str]] = {src_type: src_field_types}
-
-    def get_to_fields(tname: str) -> dict[str, str] | None:
-        if tname in parsed_to:
-            return parsed_to[tname]
-        try:
-            fields = parse_record_components(types_to_ads, tname)
-        except Exception:
-            fields = None
-        if fields is not None:
-            parsed_to[tname] = fields
-        return fields
-
-    def get_from_fields(tname: str) -> dict[str, str] | None:
-        if tname in parsed_from:
-            return parsed_from[tname]
-        try:
-            fields = parse_record_components(types_from_ads, tname)
-        except Exception:
-            fields = None
-        if fields is not None:
-            parsed_from[tname] = fields
-        return fields
-
-    def value_expr(dst_t: str, src_t: str | None, src_expr: str) -> str:
-        # If both are records, build nested aggregate by matching field names
-        to_fields = get_to_fields(dst_t) if dst_t else None
-        from_fields = get_from_fields(src_t) if src_t else None
-        if to_fields and from_fields:
-            # If there is an explicit mapping for these record types, delegate
-            if src_t and dst_t and (src_t.strip(), dst_t.strip()) in mapping_pairs:
-                return f"Map({src_expr})"
-            parts: list[str] = []
-            for d_name, d_ftype in to_fields.items():
-                s_name = d_name if d_name in from_fields else None
-                if not s_name:
-                    # Fallback: try lowercase match
-                    lf = {k.lower(): k for k in from_fields.keys()}
-                    s_name = lf.get(d_name.lower())
-                if not s_name:
-                    # No source field; emit default aggregate with null record? Not possible in Ada; cast from src_expr as last resort
-                    parts.append(f"{d_name} => {d_ftype} ({src_expr})")
-                    continue
-                s_ftype = from_fields[s_name]
-                sub_expr = value_expr(d_ftype, s_ftype, f"{src_expr}.{s_name}")
-                parts.append(f"{d_name} => {sub_expr}")
-            return f"( {', '.join(parts)} )"
-        # Arrays: if both are arrays, delegate to Map and register needed pair
-        to_elem = parse_array_component_type(types_to_ads, dst_t) if dst_t else None
-        from_elem = parse_array_component_type(types_from_ads, src_t) if src_t else None
-        if to_elem and from_elem:
-            needed_array_maps.add((src_t.strip(), dst_t.strip()))
-            return f"Map({src_expr})"
-        # Scalar or unmatched: cast to destination type if available
-        return f"{dst_t} ({src_expr})" if dst_t else src_expr
-
-    associations = []
-    
-    # Helper: resolve a dotted source path to its final type name
-    def resolve_src_path_type(start_type: str, path: str) -> str | None:
-        cur_t = start_type
-        for part in path.split('.'):
-            field_map = get_from_fields(cur_t)
-            if not field_map:
-                return None
-            # Case-insensitive match fallback
-            key = part if part in field_map else next((k for k in field_map if k.lower() == part.lower()), None)
-            if not key:
-                return None
-            cur_t = field_map[key].strip()
-        return cur_t
-
-    for dest, src in fields.items():
-        d_t = dst_field_types.get(dest)
-        # Determine source terminal type; support dotted paths like "Position.Latitude"
-        if isinstance(src, str) and '.' in src:
-            s_t = resolve_src_path_type(src_type, src)
-        else:
-            s_t = src_field_types.get(src)
-        expr = value_expr(d_t, s_t, f"X.{src}")
-        associations.append(f"{dest} => {expr}")
-
-    joined = ",\n       ".join(associations)
-    return (
-        f"   function Map (X : Types_From.{src_type}) return Types_To.{dst_type} is\n"
-        f"     ( {joined} );\n"
-    )
+def _gen_with_class(mg: MapperGenerator, src_type: str, dst_type: str, fields: dict[str, str]) -> str:
+    return mg.gen_record_function_body(src_type, dst_type, fields)
 
 
 def run_compile(outdir: Path) -> int:
@@ -210,12 +109,12 @@ def main():
     # Resolve type spec locations relative to output directory
     types_from_ads = Path(outdir) / "types_from.ads"
     types_to_ads = Path(outdir) / "types_to.ads"
+    mg = MapperGenerator(types_from_ads, types_to_ads, set())
 
     # Build a set of known mapping type pairs for nested delegation
-    mapping_pairs: set[tuple[str, str]] = set(
+    mg.mapping_pairs = set(
         (m.get("from"), m.get("to")) for m in mappings if m.get("from") and m.get("to")
     )
-    needed_array_maps: set[tuple[str, str]] = set()
 
     for m in mappings:
         src_type = m["from"]
@@ -223,79 +122,20 @@ def main():
         fields = m["fields"]
 
         spec_parts.append(gen_function_spec(src_type, dst_type))
-        body_parts.append(
-            gen_function_body(
-                src_type, dst_type, fields,
-                types_from_ads, types_to_ads,
-                mapping_pairs, needed_array_maps,
-            )
-        )
+        body_parts.append(_gen_with_class(mg, src_type, dst_type, fields))
 
     # Expand array mapping pairs transitively for nested arrays
-    changed = True
-    while changed:
-        changed = False
-        for src_arr, dst_arr in list(needed_array_maps):
-            src_elem = parse_array_component_type(types_from_ads, src_arr)
-            dst_elem = parse_array_component_type(types_to_ads, dst_arr)
-            if src_elem and dst_elem:
-                # If elements are arrays, ensure their pair is included as well
-                src_elem2 = parse_array_component_type(types_from_ads, src_elem)
-                dst_elem2 = parse_array_component_type(types_to_ads, dst_elem)
-                if src_elem2 and dst_elem2:
-                    pair = (src_elem, dst_elem)
-                    if pair not in needed_array_maps:
-                        needed_array_maps.add(pair)
-                        changed = True
+    mg.expand_array_pairs_transitively()
 
     # Add Map specs for detected array pairs
-    for src_arr, dst_arr in sorted(needed_array_maps):
+    for src_arr, dst_arr in sorted(mg.needed_array_maps):
         spec_parts.append(
             f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr};\n"
         )
 
     # Emit array Map bodies (element-wise mapping with recursion)
-    def array_map_body(src_arr: str, dst_arr: str) -> str:
-        src_elem = parse_array_component_type(types_from_ads, src_arr) or ""
-        dst_elem = parse_array_component_type(types_to_ads, dst_arr) or ""
-        elem_expr = f"{dst_elem} (A(I))" if dst_elem else "A(I)"
-        # If there is a direct mapping for element types (records) or an array mapping pair, use it
-        to_elem2 = parse_array_component_type(types_to_ads, dst_elem) if dst_elem else None
-        from_elem2 = parse_array_component_type(types_from_ads, src_elem) if src_elem else None
-        if (src_elem, dst_elem) in mapping_pairs or (src_elem, dst_elem) in needed_array_maps:
-            elem_expr = "Map(A(I))"
-        elif to_elem2 and from_elem2:
-            # Nested arrays should have been included by closure; delegate
-            elem_expr = "Map(A(I))"
-        else:
-            # Inline record aggregate if elements are records and no explicit mapping
-            try:
-                to_fields = parse_record_components(types_to_ads, dst_elem)
-                from_fields = parse_record_components(types_from_ads, src_elem)
-                parts: list[str] = []
-                for d_name, d_ftype in to_fields.items():
-                    s_name = d_name if d_name in from_fields else next((k for k in from_fields if k.lower() == d_name.lower()), None)
-                    if not s_name:
-                        parts.append(f"{d_name} => {dst_elem} (A(I))")
-                        continue
-                    parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
-                elem_expr = f"( {', '.join(parts)} )"
-            except Exception:
-                pass
-
-        return (
-            f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr} is\n"
-            f"      R : Types_To.{dst_arr};\n"
-            f"   begin\n"
-            f"      for I in R'Range loop\n"
-            f"         R(I) := {elem_expr};\n"
-            f"      end loop;\n"
-            f"      return R;\n"
-            f"   end Map;\n"
-        )
-
-    for src_arr, dst_arr in sorted(needed_array_maps):
-        body_parts.append(array_map_body(src_arr, dst_arr))
+    for src_arr, dst_arr in sorted(mg.needed_array_maps):
+        body_parts.append(mg.array_map_body(src_arr, dst_arr))
     spec_parts.append(SPEC_TEMPLATE_FOOTER)
     body_parts.append(BODY_TEMPLATE_FOOTER)
 
