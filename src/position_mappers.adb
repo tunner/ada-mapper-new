@@ -8,8 +8,8 @@ package body Position_Mappers is
        Speed => Map(X.Speed),
        Satellites => Map(X.Satellites) );
    function Map (X : Types_From.T_Position) return Types_To.T_Position is
-     ( Latitude => X.Lat,
-       Longitude => X.Lon );
+     ( Lat => T_Integer16 (X.Latitude),
+       Lon => T_Integer16 (X.Longitude) );
    function Map (X : Types_From.T_Satellite) return Types_To.T_Satellite is
      ( ID => T_Unsigned_8 (X.ID),
        Position => Map(X.Position),

@@ -15,8 +15,8 @@
       "from": "T_Position",
       "to": "T_Position",
       "fields": {
-        "Latitude": "Lat",
-        "Longitude": "Lon"
+        "Lat": "Latitude",
+        "Lon": "Longitude"
       }
     },
     {
