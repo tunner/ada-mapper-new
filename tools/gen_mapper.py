@@ -27,6 +27,7 @@ from pathlib import Path
 from records import parse_record_components
 from arrays import parse_array_component_type, array_map_spec, array_map_body
 from generator import MapperGenerator
+from types_provider import RegexTypesProvider
 
 
 SPEC_TEMPLATE_HEADER = """with Types_From;
@@ -88,6 +89,7 @@ def main():
     parser.add_argument("mappings", nargs="?", default="mappings.json", help="Path to mappings.json")
     parser.add_argument("outdir", nargs="?", default="src", help="Output directory (default: src)")
     parser.add_argument("--validate", action="store_true", help="Compile generated mapper to validate syntax")
+    parser.add_argument("--provider", choices=["regex", "lal"], default="regex", help="Types provider backend (default: regex)")
     args = parser.parse_args()
 
     mappings_path = Path(args.mappings)
@@ -109,7 +111,12 @@ def main():
     # Resolve type spec locations relative to output directory
     types_from_ads = Path(outdir) / "types_from.ads"
     types_to_ads = Path(outdir) / "types_to.ads"
-    mg = MapperGenerator(types_from_ads, types_to_ads, set())
+    if args.provider == "lal":
+        from types_provider import LibadalangTypesProvider
+        provider = LibadalangTypesProvider(types_from_ads, types_to_ads)
+    else:
+        provider = RegexTypesProvider(types_from_ads, types_to_ads)
+    mg = MapperGenerator(provider, set())
 
     # Build a set of known mapping type pairs for nested delegation
     mg.mapping_pairs = set(

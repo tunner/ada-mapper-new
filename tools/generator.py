@@ -10,8 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
 
-from records import parse_record_components
-from arrays import parse_array_component_type
+from types_provider import TypesProvider
 
 
 TypePair = Tuple[str, str]
@@ -20,12 +19,10 @@ TypePair = Tuple[str, str]
 class MapperGenerator:
     def __init__(
         self,
-        types_from_ads: Path,
-        types_to_ads: Path,
+        provider: "TypesProvider",
         mapping_pairs: Set[TypePair],
     ) -> None:
-        self.types_from_ads = types_from_ads
-        self.types_to_ads = types_to_ads
+        self.provider = provider
         self.mapping_pairs: Set[TypePair] = mapping_pairs
         self.needed_array_maps: Set[TypePair] = set()
         self.parsed_to: Dict[str, Dict[str, str]] = {}
@@ -37,10 +34,7 @@ class MapperGenerator:
             return None
         if tname in self.parsed_to:
             return self.parsed_to[tname]
-        try:
-            fields = parse_record_components(self.types_to_ads, tname)
-        except Exception:
-            fields = None
+        fields = self.provider.get_record_fields("to", tname)
         if fields is not None:
             self.parsed_to[tname] = fields
         return fields
@@ -50,10 +44,7 @@ class MapperGenerator:
             return None
         if tname in self.parsed_from:
             return self.parsed_from[tname]
-        try:
-            fields = parse_record_components(self.types_from_ads, tname)
-        except Exception:
-            fields = None
+        fields = self.provider.get_record_fields("from", tname)
         if fields is not None:
             self.parsed_from[tname] = fields
         return fields
@@ -62,12 +53,12 @@ class MapperGenerator:
     def to_array_elem(self, tname: Optional[str]) -> Optional[str]:
         if not tname:
             return None
-        return parse_array_component_type(self.types_to_ads, tname)
+        return self.provider.get_array_element_type("to", tname)
 
     def from_array_elem(self, tname: Optional[str]) -> Optional[str]:
         if not tname:
             return None
-        return parse_array_component_type(self.types_from_ads, tname)
+        return self.provider.get_array_element_type("from", tname)
 
     # Dotted source path resolution
     def resolve_src_path_type(self, start_type: str, path: str) -> Optional[str]:
