@@ -88,10 +88,17 @@ end Types_To;
         tmp_path,
         {
             "mappings": [
-                {"name": "Wrap", "from": "Wrap_From", "to": "Wrap_To", "fields": {"C": "C"}},
+                {
+                    "name": "Wrap",
+                    "from": "Wrap_From",
+                    "to": "Wrap_To",
+                    "fields": {
+                        "C": {"from": "C", "enum_map": {"Red": "Cyan", "Green": "Magenta", "Blue": "Yellow"}}
+                    },
+                }
             ]
         },
     )
     assert "function Map (E : Types_From.Color_F) return Types_To.Color_T" in body
-    assert "Color_T'Val(Color_F'Pos(E))" in body
+    assert "when Red => Cyan" in body and "when Green => Magenta" in body and "when Blue => Yellow" in body
     assert "C => Map(X.C)" in body

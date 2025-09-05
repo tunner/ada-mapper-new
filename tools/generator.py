@@ -26,6 +26,7 @@ class MapperGenerator:
         self.mapping_pairs: Set[TypePair] = mapping_pairs
         self.needed_array_maps: Set[TypePair] = set()
         self.needed_enum_maps: Set[TypePair] = set()
+        self.enum_overrides: Dict[TypePair, Dict[str, str]] = {}
         self.parsed_to: Dict[str, Dict[str, str]] = {}
         self.parsed_from: Dict[str, Dict[str, str]] = {}
 
@@ -120,6 +121,7 @@ class MapperGenerator:
         src_type: str,
         dst_type: str,
         fields: Dict[str, str],
+        field_enum_overrides: "Optional[Dict[str, Dict[str, str]]]" = None,
     ) -> str:
         dst_field_types = self.get_to_fields(dst_type) or {}
         src_field_types = self.get_from_fields(src_type) or {}
@@ -131,6 +133,12 @@ class MapperGenerator:
                 s_t = self.resolve_src_path_type(src_type, src)
             else:
                 s_t = src_field_types.get(src)
+            # If this field maps enums and has an explicit override, register it
+            if d_t and s_t:
+                if self.provider.get_enum_literals("to", d_t) and self.provider.get_enum_literals("from", s_t):
+                    self.needed_enum_maps.add((s_t.strip(), d_t.strip()))
+                    if field_enum_overrides and dest in field_enum_overrides:
+                        self.enum_overrides[(s_t.strip(), d_t.strip())] = field_enum_overrides[dest]
             expr = self.value_expr(d_t, s_t, f"X.{src}")
             associations.append(f"{dest} => {expr}")
 

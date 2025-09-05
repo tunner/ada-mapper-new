@@ -9,7 +9,14 @@
         "Lon": "Position.Longitude",
         "Speed": "Speed",
         "Satellites": "Satellites",
-        "Status": "Status"
+        "Status": {
+          "from": "Status",
+          "enum_map": {
+            "Unknown": "Unknown",
+            "Good": "Good",
+            "Bad": "Bad"
+          }
+        }
       }
     },
     {

@@ -59,8 +59,14 @@ def gen_function_spec(src_type: str, dst_type: str) -> str:
     return f"   function Map (X : Types_From.{src_type}) return Types_To.{dst_type};\n"
 
 
-def _gen_with_class(mg: MapperGenerator, src_type: str, dst_type: str, fields: dict[str, str]) -> str:
-    return mg.gen_record_function_body(src_type, dst_type, fields)
+def _gen_with_class(
+    mg: MapperGenerator,
+    src_type: str,
+    dst_type: str,
+    fields: dict[str, str],
+    field_enum_overrides: dict[str, dict[str, str]] | None = None,
+) -> str:
+    return mg.gen_record_function_body(src_type, dst_type, fields, field_enum_overrides)
 
 
 def run_compile(outdir: Path) -> int:
@@ -127,10 +133,26 @@ def main():
     for m in mappings:
         src_type = m["from"]
         dst_type = m["to"]
-        fields = m["fields"]
+        fields_raw = m["fields"]
+        # Normalize fields and collect per-field enum overrides
+        fields = {}
+        field_enum_overrides = {}
+        for d, spec in fields_raw.items():
+            if isinstance(spec, str):
+                fields[d] = spec
+            elif isinstance(spec, dict):
+                src = spec.get("from") or spec.get("source") or spec.get("path")
+                if not src:
+                    raise ValueError(f"Field '{d}' mapping must include 'from'")
+                fields[d] = src
+                enum_map = spec.get("enum_map")
+                if isinstance(enum_map, dict):
+                    field_enum_overrides[d] = enum_map
+            else:
+                raise ValueError(f"Unsupported field mapping for '{d}': {spec!r}")
 
         spec_parts.append(gen_function_spec(src_type, dst_type))
-        body_parts.append(_gen_with_class(mg, src_type, dst_type, fields))
+        body_parts.append(_gen_with_class(mg, src_type, dst_type, fields, field_enum_overrides))
 
     # Expand array mapping pairs transitively for nested arrays
     mg.expand_array_pairs_transitively()
