@@ -12,7 +12,7 @@
         "Status": {
           "from": "Status",
           "enum_map": {
-            "Unknown": "Unknown",
+            "Unknown": "None",
             "Good": "Good",
             "Bad": "Bad"
           }

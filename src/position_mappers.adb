@@ -29,6 +29,6 @@ package body Position_Mappers is
       return R;
    end Map;
    function Map (E : Types_From.T_Status) return Types_To.T_Status is
-     (case E is when Unknown => Unknown, when Good => Good, when Bad => Bad);
+     (case E is when Unknown => None, when Good => Good, when Bad => Bad);
 
 end Position_Mappers;
