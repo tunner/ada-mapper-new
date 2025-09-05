@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+from pathlib import Path
+import re
+from typing import Optional, List
+
+
+def parse_enum_literals(ads_path: Path, type_name: str) -> Optional[List[str]]:
+    """Parse enumeration literal list for a given type.
+
+    Looks for: `type <Name> is (<lit1>, <lit2>, ...);`
+    Accepts multiline lists. Returns a list of literal identifiers
+    in declared order, or None if not found / not an enum type.
+    """
+    text = ads_path.read_text()
+    # Match from 'type <Name> is' through the closing ')' before ';'
+    pat = re.compile(
+        rf"\btype\s+{re.escape(type_name)}\s+is\s*\((.*?)\)\s*;",
+        re.IGNORECASE | re.DOTALL,
+    )
+    m = pat.search(text)
+    if not m:
+        return None
+    body = m.group(1)
+    # Split by commas, strip, remove trailing comments/newlines
+    lits = []
+    for part in body.split(','):
+        name = part.strip()
+        # Remove anything after '--' Ada comment on the same line
+        name = name.split('--', 1)[0].strip()
+        if not name:
+            continue
+        # Enumeration literals are identifiers; keep as-is
+        lits.append(name)
+    return lits or None
+

@@ -8,7 +8,8 @@
         "Lat": "Position.Latitude",
         "Lon": "Position.Longitude",
         "Speed": "Speed",
-        "Satellites": "Satellites"
+        "Satellites": "Satellites",
+        "Status": "Status"
       }
     },
     {

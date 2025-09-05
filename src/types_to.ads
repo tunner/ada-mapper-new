@@ -24,11 +24,15 @@ package Types_To is
 
    type T_Satellites is array (1 .. 12) of T_Satellite;
 
+   --  Enum for demonstration (reordered literals)
+   type T_Status is (Good, Bad, Unknown);
+
    type T_Position_To_Station is record
       Lat  : T_Integer16;
       Lon : T_Integer16;
       Speed: T_Speed;
       Satellites: T_Satellites;
+      Status: T_Status;
    end record;
 
 end Types_To;

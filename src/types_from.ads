@@ -22,10 +22,14 @@ package Types_From is
 
    type T_Satellites is array (1 .. 12) of T_Satellite;
 
+   --  Enum for demonstration
+   type T_Status is (Unknown, Good, Bad);
+
    type T_Position_From_GPS is record
       Position : T_Position;
       Speed     : T_Speed;
       Satellites: T_Satellites;
+      Status    : T_Status;
    end record;
 
 

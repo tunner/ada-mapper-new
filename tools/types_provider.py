@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Dict, Protocol
+from typing import Optional, Dict, Protocol, List
 
 
 class TypesProvider(Protocol):
@@ -10,6 +10,9 @@ class TypesProvider(Protocol):
         ...
 
     def get_array_element_type(self, domain: str, type_name: str) -> Optional[str]:
+        ...
+
+    def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
         ...
 
 
@@ -43,6 +46,14 @@ class RegexTypesProvider:
 
         try:
             return parse_array_component_type(self._path(domain), type_name)
+        except Exception:
+            return None
+
+    def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
+        from enums import parse_enum_literals
+
+        try:
+            return parse_enum_literals(self._path(domain), type_name)
         except Exception:
             return None
 
@@ -137,3 +148,21 @@ class LibadalangTypesProvider:
                 return tdef.f_component_def.text.strip()
             except Exception:
                 return None
+
+    def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
+        # Minimal implementation; returns None to fall back to casts or positional mapping
+        lal = self.lal
+        decl = self._find_type_decl(domain, type_name)
+        if not decl:
+            return None
+        tdef = decl.f_type_def
+        # Try to detect enum-like type definition class names without importing specific symbols
+        kind = type(tdef).__name__ if tdef is not None else ""
+        if kind not in ("EnumTypeDef", "EnumerationTypeDef"):
+            return None
+        # Attempt to extract literals; this may vary by version
+        try:
+            lits = [lit.f_id.text for lit in tdef.f_enumeration_literals]
+            return lits or None
+        except Exception:
+            return None

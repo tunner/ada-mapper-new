@@ -102,6 +102,19 @@ class MapperGenerator:
             self.needed_array_maps.add((src_t.strip(), dst_t.strip()))
             return f"Map({src_expr})"
 
+        # Enums: map by identical literal names when possible, else by position
+        to_enums = self.provider.get_enum_literals("to", dst_t) if dst_t else None
+        from_enums = self.provider.get_enum_literals("from", src_t) if src_t else None
+        if to_enums and from_enums:
+            # If all source literal names exist in destination, map by name via a case expression
+            to_set = {n.lower() for n in to_enums}
+            frm_set = [n for n in from_enums]
+            if all(n.lower() in to_set for n in frm_set):
+                alts = ", ".join([f"when {n} => {n}" for n in from_enums])
+                return f"(case {src_expr} is {alts})"
+            # Fallback: positional mapping using 'Val('Pos()) when sizes match
+            return f"{dst_t}'Val({src_t}'Pos({src_expr}))"
+
         # Scalars: cast to destination type if available
         return f"{dst_t} ({src_expr})" if dst_t else src_expr
 
