@@ -8,7 +8,7 @@ package body Position_Mappers is
        Lon => T_Integer16 (X.Position.Longitude),
        Speed => Map(X.Speed),
        Satellites => Map(X.Satellites),
-       Status => (case X.Status is when Unknown => Unknown, when Good => Good, when Bad => Bad) );
+       Status => Map(X.Status) );
    function Map (X : Types_From.T_Position) return Types_To.T_Position is
      ( Lat => T_Integer16 (X.Latitude),
        Lon => T_Integer16 (X.Longitude) );
@@ -28,5 +28,7 @@ package body Position_Mappers is
       end loop;
       return R;
    end Map;
+   function Map (E : Types_From.T_Status) return Types_To.T_Status is
+     (case E is when Unknown => Unknown, when Good => Good, when Bad => Bad);
 
 end Position_Mappers;

@@ -38,6 +38,7 @@ Decisions Log
 - Support arrays at any nesting level; generate array Map overloads and delegate for arrays-of-arrays.
 - Add --validate; require gnatmake (no fallback); error out if missing.
 - Introduce TypesProvider abstraction to allow swapping parsers (regex now, libadalang later).
+  - Added LibadalangTypesProvider stub and `--provider` flag; default remains regex.
 - Standardize naming: records.py and arrays.py under tools/.
 
 How To Use

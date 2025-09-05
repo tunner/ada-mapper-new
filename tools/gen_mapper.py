@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from records import parse_record_components
 from arrays import parse_array_component_type, array_map_spec, array_map_body
+from enums import enum_map_spec, enum_map_body
 from generator import MapperGenerator
 from types_provider import RegexTypesProvider
 
@@ -138,9 +139,17 @@ def main():
     for src_arr, dst_arr in sorted(mg.needed_array_maps):
         spec_parts.append(array_map_spec(src_arr, dst_arr))
 
+    # Add Map specs for detected enum pairs
+    for src_enum, dst_enum in sorted(mg.needed_enum_maps):
+        spec_parts.append(enum_map_spec(src_enum, dst_enum))
+
     # Emit array Map bodies (element-wise mapping with recursion)
     for src_arr, dst_arr in sorted(mg.needed_array_maps):
         body_parts.append(array_map_body(mg, src_arr, dst_arr))
+
+    # Emit enum Map bodies
+    for src_enum, dst_enum in sorted(mg.needed_enum_maps):
+        body_parts.append(enum_map_body(mg, src_enum, dst_enum))
     spec_parts.append(SPEC_TEMPLATE_FOOTER)
     body_parts.append(BODY_TEMPLATE_FOOTER)
 

@@ -1,30 +1,17 @@
-we need to map two different Ada records 
+Ada record-to-record mapper generator
 
-e.g.
+What this does
+- Generates Ada `Map` functions between source and destination record types based on a minimal JSON spec.
+- Uses Ada’s type system: casts are inlined to the destination field type.
+- Supports nested records, arrays (including arrays of records/arrays), and enums.
+- Allows dotted source paths to flatten nested fields.
 
-type t_position_from_gps is
-   record
-	  latitude  : Float
-	  longitude : Float
-   end record;	
+Quick start
+- Edit `mappings.json` and the type specs in `src/types_from.ads` and `src/types_to.ads`.
+- Generate: `python3 tools/gen_mapper.py mappings.json src`
+- Optional compile check (requires `gnatmake`): `python3 tools/gen_mapper.py --validate mappings.json src`
 
-type t_position_to_station is
-   record	
-	  lat  : Float
-	  long : Float
-   end record;
-
-Mapping:
-   latitude  <-> lat
-   longitude <-> long
-
-position_from_gps : t_position_from_gps(latitude => 12.34, longitude => 56.78);
-position_to_station: t_position_from_gps := C_Map(position_from_gps);
-
----
-
-Example mappings.json
-
+JSON format (example)
 {
   "mappings": [
     {
@@ -32,13 +19,22 @@ Example mappings.json
       "from": "T_Position_From_GPS",
       "to": "T_Position_To_Station",
       "fields": {
-        "Lat": "Latitude",
-        "Long": "Longitude"
+        "Lat": "Position.Latitude",
+        "Lon": "Position.Longitude",
+        "Speed": "Speed",
+        "Satellites": "Satellites",
+        "Status": "Status"
       }
     }
   ]
 }
 
 Notes
-- The JSON only declares field name correspondences; it omits types and conversions.
-- Generated mappers call a central `Convert` function per field; Ada resolves the correct overload from source/destination types.
+- Only field names are declared; no types or conversions in JSON.
+- Nested records: the generator delegates to `Map(Subrecord)` if a pair exists.
+- Arrays: the generator emits `Map(A : From_Array) return To_Array` and maps elements, delegating if needed.
+- Enums: the generator emits a dedicated `Map` for enum pairs; it maps by literal name when possible, else by position (`Dst'Val(Src'Pos(...))`).
+
+Providers
+- Default: regex-based parsing over `src/types_from.ads` and `src/types_to.ads`.
+- Optional: Libadalang (when installed): `--provider lal`.
