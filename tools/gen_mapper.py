@@ -231,6 +231,23 @@ def main():
             )
         )
 
+    # Expand array mapping pairs transitively for nested arrays
+    changed = True
+    while changed:
+        changed = False
+        for src_arr, dst_arr in list(needed_array_maps):
+            src_elem = parse_array_component_type(types_from_ads, src_arr)
+            dst_elem = parse_array_component_type(types_to_ads, dst_arr)
+            if src_elem and dst_elem:
+                # If elements are arrays, ensure their pair is included as well
+                src_elem2 = parse_array_component_type(types_from_ads, src_elem)
+                dst_elem2 = parse_array_component_type(types_to_ads, dst_elem)
+                if src_elem2 and dst_elem2:
+                    pair = (src_elem, dst_elem)
+                    if pair not in needed_array_maps:
+                        needed_array_maps.add(pair)
+                        changed = True
+
     # Add Map specs for detected array pairs
     for src_arr, dst_arr in sorted(needed_array_maps):
         spec_parts.append(
@@ -242,31 +259,29 @@ def main():
         src_elem = parse_array_component_type(types_from_ads, src_arr) or ""
         dst_elem = parse_array_component_type(types_to_ads, dst_arr) or ""
         elem_expr = f"{dst_elem} (A(I))" if dst_elem else "A(I)"
-        # If there is a direct mapping for element types, use it
-        if (src_elem, dst_elem) in mapping_pairs:
+        # If there is a direct mapping for element types (records) or an array mapping pair, use it
+        to_elem2 = parse_array_component_type(types_to_ads, dst_elem) if dst_elem else None
+        from_elem2 = parse_array_component_type(types_from_ads, src_elem) if src_elem else None
+        if (src_elem, dst_elem) in mapping_pairs or (src_elem, dst_elem) in needed_array_maps:
+            elem_expr = "Map(A(I))"
+        elif to_elem2 and from_elem2:
+            # Nested arrays should have been included by closure; delegate
             elem_expr = "Map(A(I))"
         else:
-            # Arrays of arrays
-            to_elem2 = parse_array_component_type(types_to_ads, dst_elem) if dst_elem else None
-            from_elem2 = parse_array_component_type(types_from_ads, src_elem) if src_elem else None
-            if to_elem2 and from_elem2:
-                needed_array_maps.add((src_elem, dst_elem))
-                elem_expr = "Map(A(I))"
-            else:
-                # Inline record aggregate if elements are records and no explicit mapping
-                try:
-                    to_fields = parse_record_components(types_to_ads, dst_elem)
-                    from_fields = parse_record_components(types_from_ads, src_elem)
-                    parts: list[str] = []
-                    for d_name, d_ftype in to_fields.items():
-                        s_name = d_name if d_name in from_fields else next((k for k in from_fields if k.lower() == d_name.lower()), None)
-                        if not s_name:
-                            parts.append(f"{d_name} => {dst_elem} (A(I))")
-                            continue
-                        parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
-                    elem_expr = f"( {', '.join(parts)} )"
-                except Exception:
-                    pass
+            # Inline record aggregate if elements are records and no explicit mapping
+            try:
+                to_fields = parse_record_components(types_to_ads, dst_elem)
+                from_fields = parse_record_components(types_from_ads, src_elem)
+                parts: list[str] = []
+                for d_name, d_ftype in to_fields.items():
+                    s_name = d_name if d_name in from_fields else next((k for k in from_fields if k.lower() == d_name.lower()), None)
+                    if not s_name:
+                        parts.append(f"{d_name} => {dst_elem} (A(I))")
+                        continue
+                    parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
+                elem_expr = f"( {', '.join(parts)} )"
+            except Exception:
+                pass
 
         return (
             f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr} is\n"
