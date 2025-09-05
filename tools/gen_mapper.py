@@ -144,40 +144,25 @@ def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
 
 
 def run_compile(outdir: Path) -> int:
-    """Compile the generated mapper to validate syntax.
+    """Compile the generated mapper to validate syntax using gnatmake only.
 
-    Tries `gnatmake` directly; if unavailable, tries `alr exec`.
-    Returns the subprocess return code.
+    Returns the subprocess return code. If gnatmake is not found, returns 127.
     """
     mapper = outdir / "position_mappers.adb"
     cmd = ["gnatmake", "-q", "-c", f"-I{outdir}", str(mapper)]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            print("Validation: mapper compiles (gnatmake).")
-            return 0
-        else:
-            sys.stderr.write(res.stdout)
-            sys.stderr.write(res.stderr)
     except FileNotFoundError:
-        pass
-
-    # Fallback via Alire if available
-    cmd = [
-        "alr", "-n", "-q", "exec", "--",
-        "gnatmake", "-q", "-c", f"-I{outdir}", str(mapper),
-    ]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            print("Validation: mapper compiles (alr exec).")
-        else:
-            sys.stderr.write(res.stdout)
-            sys.stderr.write(res.stderr)
-        return res.returncode
-    except FileNotFoundError:
-        print("Validation skipped: neither gnatmake nor alr found on PATH.")
+        sys.stderr.write(
+            "Validation failed: gnatmake not found on PATH. Please install GNAT and ensure 'gnatmake' is available.\n"
+        )
         return 127
+    if res.returncode == 0:
+        print("Validation: mapper compiles.")
+    else:
+        sys.stderr.write(res.stdout)
+        sys.stderr.write(res.stderr)
+    return res.returncode
 
 
 def main():
@@ -288,7 +273,7 @@ def main():
 
     if args.validate:
         code = run_compile(outdir)
-        if code != 0 and code != 127:
+        if code != 0:
             sys.exit(code)
 
 
