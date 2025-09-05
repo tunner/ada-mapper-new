@@ -5,7 +5,8 @@
       "from": "T_Position_From_GPS",
       "to": "T_Position_To_Station",
       "fields": {
-        "Position": "Position",
+        "Lat": "Position.Latitude",
+        "Lon": "Position.Longitude",
         "Speed": "Speed",
         "Satellites": "Satellites"
       }

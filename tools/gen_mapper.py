@@ -130,9 +130,28 @@ def gen_function_body(src_type: str, dst_type: str, fields: dict[str, str],
         return f"{dst_t} ({src_expr})" if dst_t else src_expr
 
     associations = []
+    
+    # Helper: resolve a dotted source path to its final type name
+    def resolve_src_path_type(start_type: str, path: str) -> str | None:
+        cur_t = start_type
+        for part in path.split('.'):
+            field_map = get_from_fields(cur_t)
+            if not field_map:
+                return None
+            # Case-insensitive match fallback
+            key = part if part in field_map else next((k for k in field_map if k.lower() == part.lower()), None)
+            if not key:
+                return None
+            cur_t = field_map[key].strip()
+        return cur_t
+
     for dest, src in fields.items():
         d_t = dst_field_types.get(dest)
-        s_t = src_field_types.get(src)
+        # Determine source terminal type; support dotted paths like "Position.Latitude"
+        if isinstance(src, str) and '.' in src:
+            s_t = resolve_src_path_type(src_type, src)
+        else:
+            s_t = src_field_types.get(src)
         expr = value_expr(d_t, s_t, f"X.{src}")
         associations.append(f"{dest} => {expr}")
 

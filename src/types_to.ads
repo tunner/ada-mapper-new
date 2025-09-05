@@ -25,7 +25,8 @@ package Types_To is
    type T_Satellites is array (1 .. 12) of T_Satellite;
 
    type T_Position_To_Station is record
-      Position: T_Position;
+      Lat  : T_Integer16;
+      Lon : T_Integer16;
       Speed: T_Speed;
       Satellites: T_Satellites;
    end record;
