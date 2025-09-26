@@ -97,8 +97,14 @@ def enum_map_body(mg: Any, src_enum: str, dst_enum: str) -> str:
             "Add enum_map entries for these literals or align the enum names."
         )
 
-    alts = ", ".join(parts)
-    expr = f"(case E is {alts})"
+    case_indent = "        "
+    alts = (",\n" + case_indent).join(parts)
+    expr_lines = [
+        "(case E is",
+        f"{case_indent}{alts}",
+        "     )",
+    ]
+    expr = "\n".join(expr_lines)
     return (
         f"   function Map (E : Types_From.{src_enum}) return Types_To.{dst_enum} is\n"
         f"     {expr};\n"

@@ -6,7 +6,11 @@ package body Position_Mappers is
    function Map (X : Types_From.T_Position_From_GPS) return Types_To.T_Position_To_Station is
      ( Lat => T_Integer16 (X.Position.Latitude),
        Lon => T_Integer16 (X.Position.Longitude),
-       Speed => ( North => T_Float_16 (X.Speed.North), East => T_Float_16 (X.Speed.East), Down => T_Float_16 (X.Speed.Down) ),
+       Speed => (
+         North => T_Float_16 (X.Speed.North),
+         East => T_Float_16 (X.Speed.East),
+         Down => T_Float_16 (X.Speed.Down)
+      ),
        Satellites => Map(X.Satellites),
        Status => Map(X.Status) );
    function Map (X : Types_From.T_Position) return Types_To.T_Position is
@@ -15,7 +19,11 @@ package body Position_Mappers is
    function Map (X : Types_From.T_Satellite) return Types_To.T_Satellite is
      ( ID => T_Unsigned_8 (X.ID),
        Position => Map(X.Position),
-       Speed => ( North => T_Float_16 (X.Speed.North), East => T_Float_16 (X.Speed.East), Down => T_Float_16 (X.Speed.Down) ) );
+       Speed => (
+         North => T_Float_16 (X.Speed.North),
+         East => T_Float_16 (X.Speed.East),
+         Down => T_Float_16 (X.Speed.Down)
+      ) );
    function Map (A : Types_From.T_Satellites) return Types_To.T_Satellites is
       R : Types_To.T_Satellites;
    begin
@@ -25,6 +33,10 @@ package body Position_Mappers is
       return R;
    end Map;
    function Map (E : Types_From.T_Status) return Types_To.T_Status is
-     (case E is when Unknown => None, when Good => Good, when Bad => Bad);
+     (case E is
+        when Unknown => None,
+        when Good => Good,
+        when Bad => Bad
+     );
 
 end Position_Mappers;

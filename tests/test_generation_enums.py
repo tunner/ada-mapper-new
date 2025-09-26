@@ -56,7 +56,10 @@ end Types_To;
         },
     )
     assert "function Map (E : Types_From.Status_F) return Types_To.Status_T" in body
-    assert "(case E is when Unknown => Unknown, when Good => Good, when Bad => Bad)" in body
+    assert "(case E is" in body
+    assert "when Unknown => Unknown" in body
+    assert "when Good => Good" in body
+    assert "when Bad => Bad" in body
     assert "S => Map(X.S)" in body
 
 

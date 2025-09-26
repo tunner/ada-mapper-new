@@ -71,7 +71,7 @@ def array_map_body(mg: Any, src_arr: str, dst_arr: str) -> str:
                         parts.append(f"{d_name} => {dst_elem} (A(I))")
                         continue
                     parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
-                elem_expr = f"( {', '.join(parts)} )"
+                elem_expr = mg.format_record_aggregate(parts)
         except Exception:
             pass
 

@@ -30,6 +30,15 @@ class MapperGenerator:
         self.parsed_to: Dict[str, Dict[str, str]] = {}
         self.parsed_from: Dict[str, Dict[str, str]] = {}
 
+    def format_record_aggregate(self, parts: "list[str]") -> str:
+        """Return a multi-line Ada aggregate for record assignments."""
+        if not parts:
+            return "( )"
+        inner_indent = "         "
+        closing_indent = "      "
+        joined = (",\n" + inner_indent).join(parts)
+        return f"(\n{inner_indent}{joined}\n{closing_indent})"
+
     # Parsing with memoization
     def get_to_fields(self, tname: str) -> Optional[Dict[str, str]]:
         if not tname:
@@ -95,7 +104,7 @@ class MapperGenerator:
                 s_ftype = from_fields[s_name]
                 sub_expr = self.value_expr(d_ftype, s_ftype, f"{src_expr}.{s_name}")
                 parts.append(f"{d_name} => {sub_expr}")
-            return f"( {', '.join(parts)} )"
+            return self.format_record_aggregate(parts)
 
         # Arrays: delegate to Map and register required overload
         to_elem = self.to_array_elem(dst_t) if dst_t else None
