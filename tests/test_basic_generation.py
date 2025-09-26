@@ -260,3 +260,65 @@ end Types_To;
     assert "Data => Map(X.Data)" in body
     assert "function Map (A : Types_From.Byte_Array_From) return Types_To.Byte_Array_To" in body
     assert "R(I) := Byte_To (A(I));" in body
+
+
+def test_array_with_aliased_component(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Byte is range 0 .. 255;
+   type Byte_Array_From is array (0 .. 7) of aliased Byte;
+   type Wrapper_From is record
+      Data : Byte_Array_From;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Byte_To is range 0 .. 255;
+   type Byte_Array_To is array (0 .. 7) of Byte_To;
+   type Wrapper_To is record
+      Data : Byte_Array_To;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Wrapper",
+                        "from": "Wrapper_From",
+                        "to": "Wrapper_To",
+                        "fields": {"Data": "Data"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Wrapper_From) return Types_To.Wrapper_To" in body
+    assert "Data => Map(X.Data)" in body
+    assert "function Map (A : Types_From.Byte_Array_From) return Types_To.Byte_Array_To" in body
+    assert "R(I) := Byte_To (A(I));" in body
