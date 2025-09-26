@@ -7,9 +7,12 @@ What this does
 - Allows dotted source paths to flatten nested fields.
 
 Quick start
-- Edit `mappings.json` and the type specs in `src/types_from.ads` and `src/types_to.ads`.
+- Edit `mappings.json` and the type specs (default: `src/types_from.ads` and `src/types_to.ads`).
 - Generate: `python3 tools/gen_mapper.py mappings.json src`
 - Optional compile check (requires `gnatmake`): `python3 tools/gen_mapper.py --validate mappings.json src`
+
+Need different spec filenames? Add `--from-spec` / `--to-spec`, e.g.
+`python3 tools/gen_mapper.py --from-spec custom_from.ads --to-spec custom_to.ads mappings.json src`
 
 JSON format (example)
 {

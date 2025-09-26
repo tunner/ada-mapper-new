@@ -97,6 +97,16 @@ def main():
     parser.add_argument("outdir", nargs="?", default="src", help="Output directory (default: src)")
     parser.add_argument("--validate", action="store_true", help="Compile generated mapper to validate syntax")
     parser.add_argument("--provider", choices=["regex", "lal"], default="regex", help="Types provider backend (default: regex)")
+    parser.add_argument(
+        "--from-spec",
+        default="types_from.ads",
+        help="Ada spec file defining source types (default: types_from.ads relative to outdir)",
+    )
+    parser.add_argument(
+        "--to-spec",
+        default="types_to.ads",
+        help="Ada spec file defining destination types (default: types_to.ads relative to outdir)",
+    )
     args = parser.parse_args()
 
     mappings_path = Path(args.mappings)
@@ -116,8 +126,16 @@ def main():
     body_parts = [BODY_TEMPLATE_HEADER]
 
     # Resolve type spec locations relative to output directory
-    types_from_ads = Path(outdir) / "types_from.ads"
-    types_to_ads = Path(outdir) / "types_to.ads"
+    def resolve_spec(arg: str) -> Path:
+        spec_path = Path(arg)
+        if spec_path.is_absolute():
+            return spec_path
+        if spec_path.parent == Path('.'):
+            return (outdir / spec_path)
+        return spec_path
+
+    types_from_ads = resolve_spec(args.from_spec)
+    types_to_ads = resolve_spec(args.to_spec)
     if args.provider == "lal":
         from types_provider import LibadalangTypesProvider
         provider = LibadalangTypesProvider(types_from_ads, types_to_ads)
