@@ -3,6 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, Dict, Protocol, List
+import re
+
+from arrays import parse_array_component_type
+from enums import parse_enum_literals
+from records import parse_record_components
 
 
 class TypesProvider(Protocol):
@@ -25,6 +30,7 @@ class RegexTypesProvider:
     def __init__(self, types_from_ads: Path, types_to_ads: Path) -> None:
         self.types_from_ads = types_from_ads
         self.types_to_ads = types_to_ads
+        self._text_cache: dict[str, str] = {}
 
     def _path(self, domain: str) -> Path:
         if domain == "from":
@@ -33,27 +39,116 @@ class RegexTypesProvider:
             return self.types_to_ads
         raise ValueError(f"Unknown domain: {domain}")
 
-    def get_record_fields(self, domain: str, type_name: str) -> Optional[Dict[str, str]]:
-        from records import parse_record_components
+    def _text(self, domain: str) -> str:
+        if domain not in self._text_cache:
+            self._text_cache[domain] = self._path(domain).read_text()
+        return self._text_cache[domain]
 
+    def _strip_qualifiers(self, mark: str) -> str:
+        cleaned = mark.split("--", 1)[0]
+        cleaned = re.sub(r"\baliased\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bnot\s+null\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\baccess\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = " ".join(cleaned.split())
+        return cleaned.strip()
+
+    def _extract_type_name(self, mark: str) -> Optional[str]:
+        cleaned = self._strip_qualifiers(mark)
+        m = re.match(r"([A-Za-z]\w*(?:\.[A-Za-z]\w*)*)", cleaned)
+        if not m:
+            return None
+        name = m.group(1)
+        return name.split(".")[-1]
+
+    def _find_subtype_base(self, domain: str, type_name: str) -> Optional[str]:
+        text = self._text(domain)
+        pat = re.compile(
+            rf"\bsubtype\s+{re.escape(type_name)}\s+is\s+(.+?);",
+            re.IGNORECASE | re.DOTALL,
+        )
+        m = pat.search(text)
+        if not m:
+            return None
+        return m.group(1).split("--", 1)[0].strip()
+
+    def _resolve_record_fields(self, domain: str, type_name: str, seen: set[str]) -> Optional[Dict[str, str]]:
+        if not type_name or type_name in seen:
+            return None
+        seen.add(type_name)
         try:
-            return parse_record_components(self._path(domain), type_name)
+            fields = parse_record_components(self._path(domain), type_name)
+            if fields:
+                return fields
+        except Exception:
+            pass
+        base = self._find_subtype_base(domain, type_name)
+        if not base:
+            return None
+        base_name = self._extract_type_name(base)
+        if not base_name:
+            return None
+        return self._resolve_record_fields(domain, base_name, seen)
+
+    def _resolve_array_element(self, domain: str, type_name: str, seen: set[str]) -> Optional[str]:
+        if not type_name or type_name in seen:
+            return None
+        seen.add(type_name)
+        try:
+            elem = parse_array_component_type(self._path(domain), type_name)
+            if elem:
+                return self._strip_qualifiers(elem.strip())
+        except Exception:
+            pass
+        base = self._find_subtype_base(domain, type_name)
+        if not base:
+            return None
+        array_match = re.search(
+            r"array\s*\(.*?\)\s*of\s+([^;]+)",
+            base,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if array_match:
+            component = array_match.group(1).strip()
+            return self._strip_qualifiers(component)
+        base_name = self._extract_type_name(base)
+        if not base_name:
+            return None
+        return self._resolve_array_element(domain, base_name, seen)
+
+    def _resolve_enum_literals(self, domain: str, type_name: str, seen: set[str]) -> Optional[List[str]]:
+        if not type_name or type_name in seen:
+            return None
+        seen.add(type_name)
+        try:
+            lits = parse_enum_literals(self._path(domain), type_name)
+            if lits:
+                return lits
+        except Exception:
+            pass
+        base = self._find_subtype_base(domain, type_name)
+        if not base:
+            return None
+        base_name = self._extract_type_name(base)
+        if not base_name:
+            return None
+        return self._resolve_enum_literals(domain, base_name, seen)
+
+    def get_record_fields(self, domain: str, type_name: str) -> Optional[Dict[str, str]]:
+        try:
+            fields = self._resolve_record_fields(domain, type_name, set())
+            return fields
         except Exception:
             return None
 
     def get_array_element_type(self, domain: str, type_name: str) -> Optional[str]:
-        from arrays import parse_array_component_type
-
         try:
-            return parse_array_component_type(self._path(domain), type_name)
+            return self._resolve_array_element(domain, type_name, set())
         except Exception:
             return None
 
     def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
-        from enums import parse_enum_literals
-
         try:
-            return parse_enum_literals(self._path(domain), type_name)
+            return self._resolve_enum_literals(domain, type_name, set())
         except Exception:
             return None
 
