@@ -76,3 +76,58 @@ end Types_To;
     assert "B => T_Int16 (X.B)" in body
     assert "C => T_Int16 (X.C)" in body
 
+
+def test_aliased_field_type(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Flag_From is record
+      Trigger : Boolean;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Flag_To is record
+      Trigger : aliased Boolean;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Flag",
+                        "from": "Flag_From",
+                        "to": "Flag_To",
+                        "fields": {"Trigger": "Trigger"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Flag_From) return Types_To.Flag_To" in body
+    assert "Trigger => Boolean (X.Trigger)" in body

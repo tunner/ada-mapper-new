@@ -40,7 +40,9 @@ def parse_record_components(ads_path: Path, type_name: str) -> dict[str, str]:
         m = field_re.match(line)
         if m:
             fname = m.group(1).strip()
-            ftype = m.group(2).strip()
+            ftype = m.group(2).split("--", 1)[0].strip()
+            if ftype.lower().startswith("aliased "):
+                ftype = ftype.split(None, 1)[1].strip()
             fields[fname] = ftype
     if not fields:
         raise RuntimeError(f"Could not parse fields for type {type_name} in {ads_path}")
