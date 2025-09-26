@@ -69,16 +69,19 @@ class LibadalangTypesProvider:
     """
 
     def __init__(self, types_from_ads: Path, types_to_ads: Path) -> None:
+        self.paths = {"from": types_from_ads, "to": types_to_ads}
         try:
             import libadalang as lal  # type: ignore
-        except Exception as exc:  # pragma: no cover
-            raise RuntimeError(
-                "libadalang is not available. Install it and retry (e.g., via AdaCore packages or Alire)."
-            ) from exc
-        self.lal = lal
-        self.paths = {"from": types_from_ads, "to": types_to_ads}
-        self.ctx = lal.AnalysisContext()
-        self.units: dict[str, any] = {}
+            self.lal = lal
+            self.ctx = lal.AnalysisContext()
+            self.units: dict[str, object] = {}
+            self._fallback = None
+        except Exception:
+            self.lal = None  # type: ignore
+            self.ctx = None  # type: ignore
+            self.units = {}
+            from types_provider import RegexTypesProvider as _RTP
+            self._fallback = _RTP(types_from_ads, types_to_ads)
 
     def _unit(self, domain: str):
         if domain not in self.units:
@@ -98,6 +101,8 @@ class LibadalangTypesProvider:
         return None
 
     def get_record_fields(self, domain: str, type_name: str) -> Optional[dict[str, str]]:
+        if self.lal is None:
+            return self._fallback.get_record_fields(domain, type_name) if self._fallback else None
         lal = self.lal
         decl = self._find_type_decl(domain, type_name)
         if not decl:
@@ -134,6 +139,10 @@ class LibadalangTypesProvider:
         return fields or None
 
     def get_array_element_type(self, domain: str, type_name: str) -> Optional[str]:
+        if self.lal is None:
+            return self._fallback.get_record_fields(domain, type_name) if self._fallback else None
+        if self.lal is None:
+            return self._fallback.get_array_element_type(domain, type_name) if self._fallback else None
         lal = self.lal
         decl = self._find_type_decl(domain, type_name)
         if not decl:
@@ -151,6 +160,8 @@ class LibadalangTypesProvider:
 
     def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
         # Minimal implementation; returns None to fall back to casts or positional mapping
+        if self.lal is None:
+            return self._fallback.get_record_fields(domain, type_name) if self._fallback else None
         lal = self.lal
         decl = self._find_type_decl(domain, type_name)
         if not decl:

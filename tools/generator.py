@@ -136,9 +136,14 @@ class MapperGenerator:
             # If this field maps enums and has an explicit override, register it
             if d_t and s_t:
                 if self.provider.get_enum_literals("to", d_t) and self.provider.get_enum_literals("from", s_t):
-                    self.needed_enum_maps.add((s_t.strip(), d_t.strip()))
+                    pair = (s_t.strip(), d_t.strip())
+                    self.needed_enum_maps.add(pair)
                     if field_enum_overrides and dest in field_enum_overrides:
-                        self.enum_overrides[(s_t.strip(), d_t.strip())] = field_enum_overrides[dest]
+                        overrides = field_enum_overrides[dest]
+                        if pair in self.enum_overrides:
+                            self.enum_overrides[pair].update(overrides)
+                        else:
+                            self.enum_overrides[pair] = dict(overrides)
             expr = self.value_expr(d_t, s_t, f"X.{src}")
             associations.append(f"{dest} => {expr}")
 

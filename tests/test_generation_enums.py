@@ -102,3 +102,47 @@ end Types_To;
     assert "function Map (E : Types_From.Color_F) return Types_To.Color_T" in body
     assert "when Red => Cyan" in body and "when Green => Magenta" in body and "when Blue => Yellow" in body
     assert "C => Map(X.C)" in body
+
+
+def test_enum_partial_override_defaults(tmp_path: Path):
+    # Only the differing literal needs to be listed, rest auto-map by identical names (case-insensitive)
+    write(
+        tmp_path / "src/types_from.ads",
+        """
+package Types_From is
+   type Status_F is (Alpha, Gamma, C_Delta);
+   type Wrap_From is record
+      S : Status_F;
+   end record;
+end Types_From;
+""".strip(),
+    )
+    write(
+        tmp_path / "src/types_to.ads",
+        """
+package Types_To is
+   type Status_T is (Alpha, Gamma, Delta);
+   type Wrap_To is record
+      S : Status_T;
+   end record;
+end Types_To;
+""".strip(),
+    )
+    body = run_gen(
+        tmp_path,
+        {
+            "mappings": [
+                {
+                    "name": "Wrap",
+                    "from": "Wrap_From",
+                    "to": "Wrap_To",
+                    "fields": {
+                        "S": {"from": "S", "enum_map": {"c_delta": "delta"}}
+                    },
+                }
+            ]
+        },
+    )
+    assert "when Alpha => Alpha" in body
+    assert "when Gamma => Gamma" in body
+    assert "when C_Delta => Delta" in body

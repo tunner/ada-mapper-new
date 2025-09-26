@@ -12,9 +12,7 @@
         "Status": {
           "from": "Status",
           "enum_map": {
-            "Unknown": "None",
-            "Good": "Good",
-            "Bad": "Bad"
+            "Unknown": "None"
           }
         }
       }
@@ -36,16 +34,6 @@
         "ID": "ID",
         "Position": "Position",
         "Speed": "Speed"
-      }
-    },
-    {
-      "name": "Speed",
-      "from": "T_Speed",
-      "to": "T_Speed",
-      "fields": {
-        "North": "North",
-        "East": "East",
-        "Down": "Down"
       }
     }
   ]
