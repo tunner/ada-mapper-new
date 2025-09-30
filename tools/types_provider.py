@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional, Dict, Protocol, List
 import re
 
-from arrays import parse_array_component_type
+from arrays import parse_array_component_type, parse_array_dimension
 from enums import parse_enum_literals
 from records import parse_record_components
 
@@ -118,6 +118,24 @@ class RegexTypesProvider:
             return None
         return self._resolve_array_element(domain, base_name, seen)
 
+    def _resolve_array_dimension(self, domain: str, type_name: str, seen: set[str]) -> Optional[int]:
+        if not type_name or type_name in seen:
+            return None
+        seen.add(type_name)
+        try:
+            dim = parse_array_dimension(self._path(domain), type_name)
+            if dim is not None:
+                return dim
+        except Exception:
+            pass
+        base = self._find_subtype_base(domain, type_name)
+        if not base:
+            return None
+        base_name = self._extract_type_name(base)
+        if not base_name:
+            return None
+        return self._resolve_array_dimension(domain, base_name, seen)
+
     def _resolve_enum_literals(self, domain: str, type_name: str, seen: set[str]) -> Optional[List[str]]:
         if not type_name or type_name in seen:
             return None
@@ -157,18 +175,9 @@ class RegexTypesProvider:
 
     def get_array_dimension(self, domain: str, type_name: str) -> Optional[int]:
         try:
-            dim = parse_array_dimension(self._path(domain), type_name)
-            if dim is not None:
-                return dim
+            return self._resolve_array_dimension(domain, type_name, set())
         except Exception:
-            pass
-        base = self._find_subtype_base(domain, type_name)
-        if not base:
             return None
-        elem = self._extract_type_name(base)
-        if not elem:
-            return None
-        return self.get_array_dimension(domain, elem)
 
 
 

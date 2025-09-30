@@ -8,6 +8,5 @@ package Position_Mappers is
    function Map (X : Types_From.e_Satellite) return Types_To.T_Satellite;
    function Map (X : Types_From.e_Position) return Types_To.T_Position;
    function Map (A : Types_From.e_Satellites) return Types_To.T_Satellites;
-   function Map (E : Types_From.e_Status) return Types_To.T_Status;
 
 end Position_Mappers;

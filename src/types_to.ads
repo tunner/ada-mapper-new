@@ -40,7 +40,7 @@ package Types_To is
 
    type T_Satellites          is array (T_Satellite_Primary_Index) of T_Satellite;
    type T_Satellite_Positions is array (T_Satellite_Primary_Index) of T_Position_Access;
-   type T_Satellite_Position_Routes is array (T_Satellite_Primary_Index, T_Satellite_Secondary_Index) of T_Position_Access;
+   type T_Satellite_Position_Routes is array (T_Satellite_Primary_Index range <>, T_Satellite_Secondary_Index range <>) of T_Position_Access;
 
    --  Enum for demonstration (reordered literals)
    type T_Status is (Good, Bad, None);

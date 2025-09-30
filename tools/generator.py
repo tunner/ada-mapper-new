@@ -216,21 +216,22 @@ class MapperGenerator:
             except AttributeError:
                 dims = None
             elem_default = self.default_expr(array_elem, seen)
+            if dims is None:
+                dims = 1
             expr = elem_default
-            repeat = dims if dims and dims > 0 else 1
-            for _ in range(repeat):
+            for _ in range(dims):
                 expr = f"(others => {expr})"
-            return f"{type_name}'{expr}"
+            return expr if type_name != base_type else f"{base_type}'{expr}"
 
         enum_literals = self.provider.get_enum_literals("to", base_type)
         if enum_literals:
             return enum_literals[0]
 
-        lowered = type_name.lower()
+        lowered = base_type.lower()
         if "access" in lowered:
             return "null"
 
-        return f"{type_name}'First"
+        return f"{base_type}'First"
 
 
     # Compute transitive closure for nested array mappings
