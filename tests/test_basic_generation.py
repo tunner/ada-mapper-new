@@ -374,6 +374,67 @@ end Types_To;
     assert "Missing_Field" in result.stderr
 
 
+def test_default_sentinel_generates_defaults(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type T_From is record
+      A : Integer;
+   end record;
+end Types_From;
+""".strip(),
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Color is (Red, Green, Blue);
+   type Vector is array (1 .. 2) of Integer;
+   type T_To is record
+      A : Integer;
+      B : Color;
+      C : Vector;
+   end record;
+end Types_To;
+""".strip(),
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Defaults",
+                        "from": "T_From",
+                        "to": "T_To",
+                        "fields": {"A": "__DEFAULT__", "B": "__DEFAULT__", "C": "__DEFAULT__"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "A => Integer'First, -- defaulted (__DEFAULT__)" in body
+    assert "B => Red, -- defaulted (__DEFAULT__)" in body
+    assert "C => Vector'(others => Integer'First) -- defaulted (__DEFAULT__)" in body
+
+
 def test_array_with_aliased_component(tmp_path: Path):
     src_dir = tmp_path / "src"
     types_from = src_dir / "types_from.ads"

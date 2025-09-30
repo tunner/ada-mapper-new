@@ -30,6 +30,7 @@ from enums import enum_map_spec, enum_map_body
 from generator import MapperGenerator
 from scaffold import MappingRequest, MappingScaffolder
 from types_provider import RegexTypesProvider
+from constants import DEFAULT_SENTINEL
 from validation import validate_mappings
 
 
@@ -245,6 +246,8 @@ def main():
                             continue
                         src_clean = source_expr.strip()
                         if src_clean.startswith("<") and src_clean.endswith(">"):
+                            continue
+                        if src_clean.upper() == DEFAULT_SENTINEL:
                             continue
                         match = from_lookup.get(src_clean.lower())
                         if match:

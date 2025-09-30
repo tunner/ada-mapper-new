@@ -20,6 +20,9 @@ class TypesProvider(Protocol):
     def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
         ...
 
+    def get_array_dimension(self, domain: str, type_name: str) -> Optional[int]:
+        ...
+
 
 class RegexTypesProvider:
     """
@@ -152,6 +155,21 @@ class RegexTypesProvider:
         except Exception:
             return None
 
+    def get_array_dimension(self, domain: str, type_name: str) -> Optional[int]:
+        try:
+            dim = parse_array_dimension(self._path(domain), type_name)
+            if dim is not None:
+                return dim
+        except Exception:
+            pass
+        base = self._find_subtype_base(domain, type_name)
+        if not base:
+            return None
+        elem = self._extract_type_name(base)
+        if not elem:
+            return None
+        return self.get_array_dimension(domain, elem)
+
 
 
 class LibadalangTypesProvider:
@@ -269,5 +287,23 @@ class LibadalangTypesProvider:
         try:
             lits = [lit.f_id.text for lit in tdef.f_enumeration_literals]
             return lits or None
+        except Exception:
+            return None
+
+    def get_array_dimension(self, domain: str, type_name: str) -> Optional[int]:
+        if self.lal is None:
+            return self._fallback.get_array_dimension(domain, type_name) if self._fallback else None
+        lal = self.lal
+        decl = self._find_type_decl(domain, type_name)
+        if not decl:
+            return None
+        tdef = decl.f_type_def
+        if not isinstance(tdef, lal.ArrayTypeDef):
+            return None
+        try:
+            dims = 0
+            for _ in tdef.f_index_constraint.f_discrete_ranges:
+                dims += 1
+            return dims or 1
         except Exception:
             return None

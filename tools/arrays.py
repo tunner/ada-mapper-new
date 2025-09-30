@@ -35,6 +35,21 @@ def parse_array_component_type(ads_path: Path, type_name: str) -> str | None:
     return elem
 
 
+def parse_array_dimension(ads_path: Path, type_name: str) -> int | None:
+    text = ads_path.read_text()
+    pat = re.compile(
+        rf"\btype\s+{re.escape(type_name)}\s+is\s+array\s*\(([^)]*)\)\s*of\s+([^;]+);",
+        re.IGNORECASE,
+    )
+    m = pat.search(text)
+    if not m:
+        return None
+    indexes = m.group(1)
+    if not indexes:
+        return 1
+    return indexes.count(',') + 1
+
+
 def array_map_spec(src_arr: str, dst_arr: str) -> str:
     """Emit the function spec for an array mapping overload."""
     return f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr};\n"

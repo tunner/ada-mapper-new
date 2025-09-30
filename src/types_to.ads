@@ -18,33 +18,41 @@ package Types_To is
    type T_Speed_Access   is access all T_Speed;
    type T_Speed_Buffer   is array (Positive range <>) of T_Speed_Access;
 
-   Type T_Position is record
-      Lat : T_Latitude_Count;
-      Lon : T_Longitude_Count;
+   type T_Position is record
+      Lat            : T_Latitude_Count;
+      Lon            : T_Longitude_Count;
+      Heading_Track  : T_Fixed_Angle;
+      Recent_Speeds  : T_Speed_Buffer(1 .. 2);
    end record;
 
    type T_Position_Access    is access all T_Position;
-   type T_Position_Handle_Set is array (Positive range <>) of T_Position_Access;
+   type T_Position_Catalog   is array (Positive range <>) of T_Position_Access;
 
    type T_Satellite is record
-      ID       : T_Unsigned_8;
-      Position : T_Position;
-      Speed    : T_Speed;
+      ID        : T_Unsigned_8;
+      Position  : T_Position;
+      Speed     : T_Speed;
+      Snapshots : T_Position_Catalog(1 .. 4);
    end record;
 
-   subtype T_Satellite_Index is Positive range 1 .. 12;
-   type T_Satellites         is array (T_Satellite_Index) of T_Satellite;
-   type T_Satellite_Positions is array (T_Satellite_Index) of T_Position_Access;
+   subtype T_Satellite_Primary_Index is Positive range 1 .. 12;
+   subtype T_Satellite_Secondary_Index is Positive range 1 .. 6;
+
+   type T_Satellites          is array (T_Satellite_Primary_Index) of T_Satellite;
+   type T_Satellite_Positions is array (T_Satellite_Primary_Index) of T_Position_Access;
+   type T_Satellite_Position_Routes is array (T_Satellite_Primary_Index, T_Satellite_Secondary_Index) of T_Position_Access;
 
    --  Enum for demonstration (reordered literals)
    type T_Status is (Good, Bad, None);
 
    type T_Position_To_Station is record
-      Lat        : T_Latitude_Count;
-      Lon        : T_Longitude_Count;
-      Speed      : T_Speed;
-      Satellites : T_Satellites;
-      Status     : T_Status;
+      Lat            : T_Latitude_Count;
+      Lon            : T_Longitude_Count;
+      Speed          : T_Speed;
+      Satellites     : T_Satellites;
+      Status         : T_Status;
+      Sat_Position_Refs : T_Satellite_Positions;
+      Sat_Routes        : T_Satellite_Position_Routes(1 .. 3, 1 .. 2);
    end record;
 
 end Types_To;

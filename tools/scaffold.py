@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 import re
 
+from constants import DEFAULT_SENTINEL
 from types_provider import TypesProvider
 
 
@@ -92,6 +93,8 @@ class MappingScaffolder:
             if isinstance(from_value, str) and not self.is_placeholder(from_value):
                 if self._has_supported_type("from", from_value):
                     actual_from = from_value
+            if self._entry_all_placeholders(entry):
+                continue
             requests.append(
                 MappingRequest(
                     name=name,
@@ -223,6 +226,8 @@ class MappingScaffolder:
                 spec_clean = existing_spec.strip()
                 if self.is_placeholder(spec_clean):
                     existing_spec = None
+                elif spec_clean.upper() == DEFAULT_SENTINEL:
+                    spec_value = DEFAULT_SENTINEL
                 else:
                     spec_value = existing_spec
                     src_name = from_lookup.get(spec_clean.lower())
@@ -254,6 +259,9 @@ class MappingScaffolder:
             fields[dest_name] = spec_value
 
             # Nested record mapping
+            if isinstance(spec_value, str) and spec_value.upper() == DEFAULT_SENTINEL:
+                continue
+
             if self.provider.get_record_fields("to", dest_mark):
                 nested_from_type = src_mark.strip() if src_mark else None
                 if nested_from_type and not self.provider.get_record_fields("from", nested_from_type):
@@ -290,12 +298,15 @@ class MappingScaffolder:
                 elif self.provider.get_enum_literals("from", dest_mark):
                     src_enum_type = dest_mark
                 nested_name = self._preferred_names.get(dest_mark) or self._default_name(dest_mark)
+                nested_fields = None
+                if isinstance(existing_spec, dict) and isinstance(existing_spec.get("fields"), dict):
+                    nested_fields = existing_spec["fields"]
                 nested_requests.append(
                     MappingRequest(
                         name=nested_name,
                         to_type=dest_mark,
                         from_type=src_enum_type,
-                        existing_fields=None,
+                        existing_fields=nested_fields,
                     )
                 )
 
@@ -317,3 +328,19 @@ class MappingScaffolder:
         if self.provider.get_enum_literals(domain, type_name):
             return True
         return False
+
+    def _entry_all_placeholders(self, entry: Dict[str, object]) -> bool:
+        from_value = entry.get("from")
+        if isinstance(from_value, str) and not (self.is_placeholder(from_value) or from_value.strip().upper() == DEFAULT_SENTINEL):
+            return False
+        fields = entry.get("fields")
+        if not isinstance(fields, dict):
+            return True
+        for value in fields.values():
+            if isinstance(value, str):
+                cleaned = value.strip()
+                if cleaned and not self.is_placeholder(cleaned) and cleaned.upper() != DEFAULT_SENTINEL:
+                    return False
+            elif isinstance(value, dict):
+                return False
+        return True

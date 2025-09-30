@@ -8,7 +8,9 @@ record/array handling, dotted source paths, and emission helpers.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple, List
+
+from constants import DEFAULT_SENTINEL
 
 from types_provider import TypesProvider
 
@@ -30,14 +32,26 @@ class MapperGenerator:
         self.parsed_to: Dict[str, Dict[str, str]] = {}
         self.parsed_from: Dict[str, Dict[str, str]] = {}
 
-    def format_record_aggregate(self, parts: "list[str]") -> str:
+    def format_record_lines(
+        self, parts: List[Tuple[str, str, Optional[str]]], indent: str = "       "
+    ) -> List[str]:
+        lines: List[str] = []
+        for idx, (dest, expr, comment) in enumerate(parts):
+            line = f"{indent}{dest} => {expr}"
+            if idx < len(parts) - 1:
+                line += ","
+            if comment:
+                line += f" -- {comment}"
+            lines.append(line)
+        return lines
+
+    def format_record_aggregate(self, parts: List[Tuple[str, str, Optional[str]]]) -> str:
         """Return a multi-line Ada aggregate for record assignments."""
         if not parts:
             return "( )"
-        inner_indent = "         "
-        closing_indent = "      "
-        joined = (",\n" + inner_indent).join(parts)
-        return f"(\n{inner_indent}{joined}\n{closing_indent})"
+        lines = self.format_record_lines(parts)
+        joined = "\n".join(lines)
+        return f"(\n{joined}\n    )"
 
     # Parsing with memoization
     def get_to_fields(self, tname: str) -> Optional[Dict[str, str]]:
@@ -85,33 +99,35 @@ class MapperGenerator:
         return cur_t
 
     # Expression builder (records, arrays, scalars)
-    def value_expr(self, dst_t: Optional[str], src_t: Optional[str], src_expr: str) -> str:
+    def value_expr(self, dst_t: Optional[str], src_t: Optional[str], src_expr: str) -> Tuple[str, Optional[str]]:
+        if isinstance(src_expr, str) and src_expr.strip().upper() == DEFAULT_SENTINEL:
+            return self.default_expr(dst_t), f"defaulted ({DEFAULT_SENTINEL})"
         # Records: nested aggregate or delegate to Map if explicit mapping exists
         to_fields = self.get_to_fields(dst_t) if dst_t else None
         from_fields = self.get_from_fields(src_t) if src_t else None
         if to_fields and from_fields:
             if src_t and dst_t and (src_t.strip(), dst_t.strip()) in self.mapping_pairs:
-                return f"Map({src_expr})"
-            parts = []
+                return f"Map({src_expr})", None
+            parts: List[Tuple[str, str, Optional[str]]] = []
             for d_name, d_ftype in to_fields.items():
                 s_name = d_name if d_name in from_fields else None
                 if not s_name:
                     lf = {k.lower(): k for k in from_fields.keys()}
                     s_name = lf.get(d_name.lower())
                 if not s_name:
-                    parts.append(f"{d_name} => {d_ftype} ({src_expr})")
+                    parts.append((d_name, f"{d_ftype} ({src_expr})", None))
                     continue
                 s_ftype = from_fields[s_name]
-                sub_expr = self.value_expr(d_ftype, s_ftype, f"{src_expr}.{s_name}")
-                parts.append(f"{d_name} => {sub_expr}")
-            return self.format_record_aggregate(parts)
+                sub_expr, sub_comment = self.value_expr(d_ftype, s_ftype, f"{src_expr}.{s_name}")
+                parts.append((d_name, sub_expr, sub_comment))
+            return self.format_record_aggregate(parts), None
 
         # Arrays: delegate to Map and register required overload
         to_elem = self.to_array_elem(dst_t) if dst_t else None
         from_elem = self.from_array_elem(src_t) if src_t else None
         if to_elem and from_elem:
             self.needed_array_maps.add((src_t.strip(), dst_t.strip()))
-            return f"Map({src_expr})"
+            return f"Map({src_expr})", None
 
         # Enums: map by identical literal names when possible, else by position
         to_enums = self.provider.get_enum_literals("to", dst_t) if dst_t else None
@@ -119,10 +135,10 @@ class MapperGenerator:
         if to_enums and from_enums:
             # Defer to a dedicated enum Map overload
             self.needed_enum_maps.add((src_t.strip(), dst_t.strip()))
-            return f"Map({src_expr})"
+            return f"Map({src_expr})", None
 
         # Scalars: cast to destination type if available
-        return f"{dst_t} ({src_expr})" if dst_t else src_expr
+        return (f"{dst_t} ({src_expr})" if dst_t else src_expr), None
 
     # Generate a record mapping function body
     def gen_record_function_body(
@@ -135,9 +151,12 @@ class MapperGenerator:
         dst_field_types = self.get_to_fields(dst_type) or {}
         src_field_types = self.get_from_fields(src_type) or {}
 
-        associations = []
+        associations: List[Tuple[str, str, Optional[str]]] = []
         for dest, src in fields.items():
             d_t = dst_field_types.get(dest)
+            if isinstance(src, str) and src.strip().upper() == DEFAULT_SENTINEL:
+                associations.append((dest, self.default_expr(d_t), f"defaulted ({DEFAULT_SENTINEL})"))
+                continue
             if isinstance(src, str) and '.' in src:
                 s_t = self.resolve_src_path_type(src_type, src)
             else:
@@ -153,14 +172,66 @@ class MapperGenerator:
                             self.enum_overrides[pair].update(overrides)
                         else:
                             self.enum_overrides[pair] = dict(overrides)
-            expr = self.value_expr(d_t, s_t, f"X.{src}")
-            associations.append(f"{dest} => {expr}")
+            expr, comment = self.value_expr(d_t, s_t, f"X.{src}")
+            associations.append((dest, expr, comment))
 
-        joined = ",\n       ".join(associations)
+        lines = self.format_record_lines(associations)
+        if lines:
+            body_lines = "\n".join(lines)
+            aggregate = f"(\n{body_lines}\n     )"
+        else:
+            aggregate = "( )"
         return (
             f"   function Map (X : Types_From.{src_type}) return Types_To.{dst_type} is\n"
-            f"     ( {joined} );\n"
+            f"     {aggregate};\n"
         )
+
+    def default_expr(self, type_name: Optional[str], seen: Optional[Set[str]] = None) -> str:
+        if not type_name:
+            return "<>"
+        type_name = type_name.strip()
+        if not type_name:
+            return "<>"
+        if seen is None:
+            seen = set()
+        if type_name in seen:
+            return f"{type_name}'First"
+        seen.add(type_name)
+
+        base_type = type_name.split('(')[0].strip()
+
+        record_fields = self.get_to_fields(base_type)
+        if record_fields:
+            parts = []
+            for fname, ftype in record_fields.items():
+                parts.append(f"{fname} => {self.default_expr(ftype, seen)}")
+            inner = ",\n         ".join(parts)
+            return f"{base_type}'(\n         {inner}\n      )"
+
+        array_elem = self.to_array_elem(base_type)
+        if array_elem:
+            dims = None
+            try:
+                dims = self.provider.get_array_dimension("to", base_type)
+            except AttributeError:
+                dims = None
+            elem_default = self.default_expr(array_elem, seen)
+            expr = elem_default
+            repeat = dims if dims and dims > 0 else 1
+            for _ in range(repeat):
+                expr = f"(others => {expr})"
+            return f"{type_name}'{expr}"
+
+        enum_literals = self.provider.get_enum_literals("to", base_type)
+        if enum_literals:
+            return enum_literals[0]
+
+        lowered = type_name.lower()
+        if "access" in lowered:
+            return "null"
+
+        return f"{type_name}'First"
+
 
     # Compute transitive closure for nested array mappings
     def expand_array_pairs_transitively(self) -> None:

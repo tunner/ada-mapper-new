@@ -21,6 +21,9 @@ Scaffolding a mapping file
   remaining fields.
 - Iteratively refine: after editing the JSON, re-run with `--update-json-map` to auto-fill any new
   matches the heuristics can now resolve.
+- If a destination field (or entire mapping) should be defaulted because no source data exists yet,
+  set its value to `"__DEFAULT__"`. The generator will emit the destination type’s first value and
+  annotate the assignment with a comment so you can spot the auto-default later.
 
 JSON format (example)
 {

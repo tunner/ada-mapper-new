@@ -4,10 +4,15 @@ from __future__ import annotations
 from typing import List, Optional
 
 from generator import MapperGenerator
+from constants import DEFAULT_SENTINEL
 
 
 def is_placeholder(value: object) -> bool:
     return isinstance(value, str) and value.startswith("<") and value.endswith(">")
+
+
+def is_default_sentinel(value: object) -> bool:
+    return isinstance(value, str) and value.strip().upper() == DEFAULT_SENTINEL
 
 
 def validate_mappings(mappings: List[dict], provider) -> List[str]:
@@ -65,6 +70,9 @@ def _validate_mapping_entry(entry: dict, mg: MapperGenerator, provider) -> List[
         errors.append(f"{ctx}: source type ('from') is missing")
         from_type = None
         from_fields = {}
+    elif is_default_sentinel(from_type_raw):
+        from_type = DEFAULT_SENTINEL
+        from_fields = {}
     else:
         if is_placeholder(from_type_raw):
             errors.append(f"{ctx}: source type is still a placeholder '{from_type_raw}'")
@@ -112,8 +120,10 @@ def _validate_mapping_entry(entry: dict, mg: MapperGenerator, provider) -> List[
                     f"{ctx}: field '{dest_actual}' still uses placeholder value '{spec_value}'"
                 )
                 continue
+            if is_default_sentinel(spec_value):
+                continue
             if '.' in spec_value:
-                if from_type:
+                if from_type and from_type != DEFAULT_SENTINEL:
                     resolved = mg.resolve_src_path_type(from_type, spec_value)
                     if resolved is None:
                         errors.append(
@@ -150,7 +160,7 @@ def _validate_mapping_entry(entry: dict, mg: MapperGenerator, provider) -> List[
                 continue
             src_ref_str = str(src_ref).strip()
             if '.' in src_ref_str:
-                if from_type:
+                if from_type and from_type != DEFAULT_SENTINEL:
                     resolved = mg.resolve_src_path_type(from_type, src_ref_str)
                     if resolved is None:
                         errors.append(
@@ -209,7 +219,7 @@ def _validate_mapping_entry(entry: dict, mg: MapperGenerator, provider) -> List[
             )
             continue
 
-        if source_type:
+        if source_type and source_type != DEFAULT_SENTINEL:
             dest_record = provider.get_record_fields("to", dest_type)
             if dest_record and not provider.get_record_fields("from", source_type):
                 errors.append(
@@ -238,6 +248,9 @@ def _validate_enum_entry(
         errors.append(f"{ctx}: source type ('from') is missing for enum mapping")
         from_type = None
         from_literals: List[str] = []
+    elif is_default_sentinel(from_type_raw):
+        from_type = DEFAULT_SENTINEL
+        from_literals = []
     else:
         if is_placeholder(from_type_raw):
             errors.append(f"{ctx}: source type is still a placeholder '{from_type_raw}'")
@@ -273,6 +286,8 @@ def _validate_enum_entry(
                 errors.append(
                     f"{ctx}: literal '{dest_lit}' still uses placeholder value '{src_spec}'"
                 )
+            elif is_default_sentinel(spec_clean):
+                continue
             elif from_lookup and spec_clean.lower() not in from_lookup:
                 errors.append(
                     f"{ctx}: literal '{dest_lit}' references unknown source literal '{src_spec}'"
