@@ -111,7 +111,29 @@ class MappingScaffolder:
             if existing:
                 # update 'from'
                 sugg_from = suggestion.get("from")
-                if self.is_placeholder(existing.get("from")) and isinstance(sugg_from, str) and not self.is_placeholder(sugg_from):
+                existing_from = existing.get("from")
+                if (
+                    isinstance(sugg_from, str)
+                    and self.is_placeholder(existing_from)
+                    and not self.is_placeholder(sugg_from)
+                ):
+                    existing["from"] = sugg_from
+                    changed = True
+                elif (
+                    isinstance(sugg_from, str)
+                    and not self.is_placeholder(sugg_from)
+                    and isinstance(existing_from, str)
+                    and not self.is_placeholder(existing_from)
+                    and existing_from != sugg_from
+                ):
+                    existing["from"] = sugg_from
+                    changed = True
+                elif (
+                    isinstance(sugg_from, str)
+                    and self.is_placeholder(sugg_from)
+                    and isinstance(existing_from, str)
+                    and not self.is_placeholder(existing_from)
+                ):
                     existing["from"] = sugg_from
                     changed = True
                 # update fields selectively
@@ -122,8 +144,24 @@ class MappingScaffolder:
                         if (current_value is None or self.is_placeholder(current_value)) and not self.is_placeholder(sugg_value):
                             existing_fields[field_name] = sugg_value
                             changed = True
+                        elif (
+                            isinstance(sugg_value, str)
+                            and self.is_placeholder(sugg_value)
+                            and isinstance(current_value, str)
+                            and not self.is_placeholder(current_value)
+                        ):
+                            existing_fields[field_name] = sugg_value
+                            changed = True
             else:
                 mappings.append(suggestion)
+                changed = True
+
+        # Remove entries that are no longer suggested at all
+        obsolete = set(existing_by_to.keys()) - set(suggestion_by_to.keys())
+        if obsolete:
+            new_list = [entry for entry in mappings if str(entry.get("to")) not in obsolete]
+            if len(new_list) != len(mappings):
+                mappings[:] = new_list
                 changed = True
 
         return changed
