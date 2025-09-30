@@ -28,6 +28,43 @@
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "Python: Init Mapping Scaffold",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/gen_mapper.py",
+      "args": [
+        "${workspaceFolder}/mappings.json",
+        "${workspaceFolder}/src",
+        "--init-json-map",
+        "${input:mappingSpec}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: Update Mapping Scaffold",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/gen_mapper.py",
+      "args": [
+        "${workspaceFolder}/mappings.json",
+        "${workspaceFolder}/src",
+        "--update-json-map"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "mappingSpec",
+      "type": "promptString",
+      "description": "Mapping spec entries (NAME:FROM:TO or FROM:TO, space-separated)",
+      "default": "Position_From_GPS_To_Station:T_Position_From_GPS:T_Position_To_Station"
     }
   ]
 }

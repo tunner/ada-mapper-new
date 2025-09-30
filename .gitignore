@@ -15,5 +15,8 @@ b__*.ads
 *.stderr
 *.stdout
 
+# Generated mapping spec
+mappings.json
+
 # Editors/IDE (keep VS Code config tracked)
 !.vscode/

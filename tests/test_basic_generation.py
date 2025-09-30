@@ -262,6 +262,118 @@ end Types_To;
     assert "R(I) := Byte_To (A(I));" in body
 
 
+def test_generation_fails_when_placeholders_remain(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type T_Int32 is range -2147483648 .. 2147483647;
+   type T_From is record
+      A : T_Int32;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type T_Int16 is range -32768 .. 32767;
+   type T_To is record
+      A : T_Int16;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Basic",
+                        "from": "T_From",
+                        "to": "T_To",
+                        "fields": {"A": "<A_INPUT_FIELD>"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "placeholder" in result.stderr.lower()
+    assert "Basic" in result.stderr
+
+
+def test_generation_fails_for_unknown_fields(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type T_Int32 is range -2147483648 .. 2147483647;
+   type T_From is record
+      A : T_Int32;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type T_Int16 is range -32768 .. 32767;
+   type T_To is record
+      B : T_Int16;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Basic",
+                        "from": "T_From",
+                        "to": "T_To",
+                        "fields": {"B": "Missing_Field"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "unknown source field" in result.stderr.lower()
+    assert "Missing_Field" in result.stderr
+
+
 def test_array_with_aliased_component(tmp_path: Path):
     src_dir = tmp_path / "src"
     types_from = src_dir / "types_from.ads"

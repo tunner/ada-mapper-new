@@ -14,6 +14,14 @@ Quick start
 Need different spec filenames? Add `--from-spec` / `--to-spec`, e.g.
 `python3 tools/gen_mapper.py --from-spec custom_from.ads --to-spec custom_to.ads mappings.json src`
 
+Scaffolding a mapping file
+- Bootstrap: `python3 tools/gen_mapper.py mappings.json src --init-json-map Name:From_Type:To_Type`
+  (repeat the `NAME:FROM:TO` triplet for each top-level mapping). The tool pre-fills obvious
+  matches (case-insensitive exact names) and adds nested records/arrays with placeholders for the
+  remaining fields.
+- Iteratively refine: after editing the JSON, re-run with `--update-json-map` to auto-fill any new
+  matches the heuristics can now resolve.
+
 JSON format (example)
 {
   "mappings": [
