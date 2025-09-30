@@ -57,33 +57,41 @@ class MapperGenerator:
     def get_to_fields(self, tname: str) -> Optional[Dict[str, str]]:
         if not tname:
             return None
-        if tname in self.parsed_to:
-            return self.parsed_to[tname]
-        fields = self.provider.get_record_fields("to", tname)
+        base = self._base_type(tname)
+        if not base:
+            return None
+        if base in self.parsed_to:
+            return self.parsed_to[base]
+        fields = self.provider.get_record_fields("to", base)
         if fields is not None:
-            self.parsed_to[tname] = fields
+            self.parsed_to[base] = fields
         return fields
 
     def get_from_fields(self, tname: str) -> Optional[Dict[str, str]]:
         if not tname:
             return None
-        if tname in self.parsed_from:
-            return self.parsed_from[tname]
-        fields = self.provider.get_record_fields("from", tname)
+        base = self._base_type(tname)
+        if not base:
+            return None
+        if base in self.parsed_from:
+            return self.parsed_from[base]
+        fields = self.provider.get_record_fields("from", base)
         if fields is not None:
-            self.parsed_from[tname] = fields
+            self.parsed_from[base] = fields
         return fields
 
     # Arrays
     def to_array_elem(self, tname: Optional[str]) -> Optional[str]:
         if not tname:
             return None
-        return self.provider.get_array_element_type("to", tname)
+        base = self._base_type(tname)
+        return self.provider.get_array_element_type("to", base) if base else None
 
     def from_array_elem(self, tname: Optional[str]) -> Optional[str]:
         if not tname:
             return None
-        return self.provider.get_array_element_type("from", tname)
+        base = self._base_type(tname)
+        return self.provider.get_array_element_type("from", base) if base else None
 
     # Dotted source path resolution
     def resolve_src_path_type(self, start_type: str, path: str) -> Optional[str]:
@@ -126,19 +134,25 @@ class MapperGenerator:
         to_elem = self.to_array_elem(dst_t) if dst_t else None
         from_elem = self.from_array_elem(src_t) if src_t else None
         if to_elem and from_elem:
-            self.needed_array_maps.add((src_t.strip(), dst_t.strip()))
+            src_key = src_t.strip() if src_t else ""
+            dst_key = dst_t.strip() if dst_t else ""
+            self.needed_array_maps.add((src_key, dst_key))
             return f"Map({src_expr})", None
 
         # Enums: map by identical literal names when possible, else by position
-        to_enums = self.provider.get_enum_literals("to", dst_t) if dst_t else None
-        from_enums = self.provider.get_enum_literals("from", src_t) if src_t else None
+        dst_enum_base = self._base_type(dst_t)
+        src_enum_base = self._base_type(src_t)
+        to_enums = self.provider.get_enum_literals("to", dst_enum_base) if dst_enum_base else None
+        from_enums = self.provider.get_enum_literals("from", src_enum_base) if src_enum_base else None
         if to_enums and from_enums:
             # Defer to a dedicated enum Map overload
             self.needed_enum_maps.add((src_t.strip(), dst_t.strip()))
             return f"Map({src_expr})", None
 
         # Scalars: cast to destination type if available
-        return (f"{dst_t} ({src_expr})" if dst_t else src_expr), None
+        base = self._base_type(dst_t)
+        cast_type = base if base else dst_t
+        return (f"{cast_type} ({src_expr})" if cast_type else src_expr), None
 
     # Generate a record mapping function body
     def gen_record_function_body(
@@ -163,7 +177,9 @@ class MapperGenerator:
                 s_t = src_field_types.get(src)
             # If this field maps enums and has an explicit override, register it
             if d_t and s_t:
-                if self.provider.get_enum_literals("to", d_t) and self.provider.get_enum_literals("from", s_t):
+                d_base = self._base_type(d_t)
+                s_base = self._base_type(s_t)
+                if d_base and s_base and self.provider.get_enum_literals("to", d_base) and self.provider.get_enum_literals("from", s_base):
                     pair = (s_t.strip(), d_t.strip())
                     self.needed_enum_maps.add(pair)
                     if field_enum_overrides and dest in field_enum_overrides:
@@ -198,7 +214,9 @@ class MapperGenerator:
             return f"{type_name}'First"
         seen.add(type_name)
 
-        base_type = type_name.split('(')[0].strip()
+        base_type = self._base_type(type_name)
+        if not base_type:
+            return "<>"
 
         record_fields = self.get_to_fields(base_type)
         if record_fields:
@@ -221,7 +239,7 @@ class MapperGenerator:
             expr = elem_default
             for _ in range(dims):
                 expr = f"(others => {expr})"
-            return expr if type_name != base_type else f"{base_type}'{expr}"
+            return expr if type_name.strip() != base_type else f"{base_type}'{expr}"
 
         enum_literals = self.provider.get_enum_literals("to", base_type)
         if enum_literals:
@@ -232,6 +250,12 @@ class MapperGenerator:
             return "null"
 
         return f"{base_type}'First"
+
+    @staticmethod
+    def _base_type(type_name: Optional[str]) -> Optional[str]:
+        if not type_name:
+            return None
+        return type_name.split('(')[0].strip()
 
 
     # Compute transitive closure for nested array mappings

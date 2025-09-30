@@ -67,13 +67,26 @@ def array_map_body(mg: Any, src_arr: str, dst_arr: str) -> str:
     """
     src_elem = mg.from_array_elem(src_arr) or ""
     dst_elem = mg.to_array_elem(dst_arr) or ""
-    elem_expr = f"{dst_elem} (A(I))" if dst_elem else "A(I)"
+
+    dims = None
+    try:
+        dims = mg.provider.get_array_dimension("to", dst_arr)
+    except AttributeError:
+        dims = None
+    if not dims:
+        dims = 1
+
+    idx_names = ["I", "J", "K", "L", "M"]
+    indices = idx_names[:dims]
+    access_expr = "A" + ("(" + ", ".join(indices) + ")" if dims > 1 else "(I)")
+
+    elem_expr = f"{dst_elem} ({access_expr})" if dst_elem else access_expr
     to_elem2 = mg.to_array_elem(dst_elem) if dst_elem else None
     from_elem2 = mg.from_array_elem(src_elem) if src_elem else None
     if (src_elem, dst_elem) in mg.mapping_pairs or (src_elem, dst_elem) in mg.needed_array_maps:
-        elem_expr = "Map(A(I))"
+        elem_expr = f"Map({access_expr})"
     elif to_elem2 and from_elem2:
-        elem_expr = "Map(A(I))"
+        elem_expr = f"Map({access_expr})"
     else:
         try:
             to_fields = mg.get_to_fields(dst_elem) or {}
@@ -83,20 +96,33 @@ def array_map_body(mg: Any, src_arr: str, dst_arr: str) -> str:
                 for d_name, d_ftype in to_fields.items():
                     s_name = d_name if d_name in from_fields else next((k for k in from_fields if k.lower() == d_name.lower()), None)
                     if not s_name:
-                        parts.append(f"{d_name} => {dst_elem} (A(I))")
+                        parts.append((d_name, f"{dst_elem} ({access_expr})", None))
                         continue
-                    parts.append(f"{d_name} => {d_ftype} (A(I).{s_name})")
+                    parts.append((d_name, f"{d_ftype} ({access_expr}.{s_name})", None))
                 elem_expr = mg.format_record_aggregate(parts)
         except Exception:
             pass
+
+    body_lines = []
+    indent = "      "
+    for level, idx in enumerate(indices):
+        spaces = indent + "   " * level
+        range_attr = "R'Range" if level == 0 else f"R'Range({level + 1})"
+        body_lines.append(f"{spaces}for {idx} in {range_attr} loop")
+    assign_indent = indent + "   " * len(indices)
+    dest_indices = ", ".join(indices)
+    dest_expr = f"R({dest_indices})" if dims > 1 else "R(I)"
+    body_lines.append(f"{assign_indent}{dest_expr} := {elem_expr};")
+    for level in reversed(range(len(indices))):
+        spaces = indent + "   " * level
+        body_lines.append(f"{spaces}end loop;")
+    loops_str = "\n".join(body_lines)
 
     return (
         f"   function Map (A : Types_From.{src_arr}) return Types_To.{dst_arr} is\n"
         f"      R : Types_To.{dst_arr};\n"
         f"   begin\n"
-        f"      for I in R'Range loop\n"
-        f"         R(I) := {elem_expr};\n"
-        f"      end loop;\n"
+        f"{loops_str}\n"
         f"      return R;\n"
         f"   end Map;\n"
     )

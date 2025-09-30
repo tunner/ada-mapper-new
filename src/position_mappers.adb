@@ -9,9 +9,9 @@ package body Position_Mappers is
        Lon => T_Longitude_Count (X.FR_Position.Longitude),
        Speed => Map(X.FR_Speed),
        Satellites => Map(X.FR_Satellites),
-       Status => Good, -- defaulted (__DEFAULT__)
-       Sat_Position_Refs => T_Satellite_Positions'(others => null), -- defaulted (__DEFAULT__)
-       Sat_Routes => (others => (others => null)) -- defaulted (__DEFAULT__)
+       Status => Map(X.FR_Status),
+       Sat_Position_Refs => Map(X.FR_Sat_Pos_Refs),
+       Sat_Routes => Map(X.FR_Sat_Routes)
      );
    function Map (X : Types_From.e_Speed) return Types_To.T_Speed is
      (
@@ -24,15 +24,41 @@ package body Position_Mappers is
        ID => T_Unsigned_8 (X.ID),
        Position => Map(X.Position),
        Speed => Map(X.Speed),
-       Snapshots => (others => null) -- defaulted (__DEFAULT__)
+       Snapshots => Map(X.Snapshots)
      );
    function Map (X : Types_From.e_Position) return Types_To.T_Position is
      (
        Lat => T_Latitude_Count (X.Latitude),
        Lon => T_Longitude_Count (X.Longitude),
-       Heading_Track => T_Fixed_Angle'First, -- defaulted (__DEFAULT__)
-       Recent_Speeds => (others => null) -- defaulted (__DEFAULT__)
+       Heading_Track => T_Fixed_Angle (X.Heading),
+       Recent_Speeds => Map(X.Speed_History)
      );
+   function Map (A : Types_From.e_Position_Catalog_4) return Types_To.T_Position_Catalog_4 is
+      R : Types_To.T_Position_Catalog_4;
+   begin
+      for I in R'Range loop
+         R(I) := Map(A(I));
+      end loop;
+      return R;
+   end Map;
+   function Map (A : Types_From.e_Satellite_Refs) return Types_To.T_Satellite_Positions is
+      R : Types_To.T_Satellite_Positions;
+   begin
+      for I in R'Range loop
+         R(I) := Map(A(I));
+      end loop;
+      return R;
+   end Map;
+   function Map (A : Types_From.e_Satellite_Route_Window) return Types_To.T_Satellite_Position_Routes_Window is
+      R : Types_To.T_Satellite_Position_Routes_Window;
+   begin
+      for I in R'Range loop
+         for J in R'Range(2) loop
+            R(I, J) := Map(A(I, J));
+         end loop;
+      end loop;
+      return R;
+   end Map;
    function Map (A : Types_From.e_Satellites) return Types_To.T_Satellites is
       R : Types_To.T_Satellites;
    begin
@@ -41,5 +67,19 @@ package body Position_Mappers is
       end loop;
       return R;
    end Map;
+   function Map (A : Types_From.e_Speed_Buffer_2) return Types_To.T_Speed_Buffer_2 is
+      R : Types_To.T_Speed_Buffer_2;
+   begin
+      for I in R'Range loop
+         R(I) := Map(A(I));
+      end loop;
+      return R;
+   end Map;
+   function Map (E : Types_From.e_Status) return Types_To.T_Status is
+     (case E is
+        when Unknown => None,
+        when Good => Good,
+        when Bad => Bad
+     );
 
 end Position_Mappers;
