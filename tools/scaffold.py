@@ -13,6 +13,7 @@ class MappingRequest:
     name: str
     to_type: str
     from_type: Optional[str] = None
+    existing_fields: Optional[Dict[str, object]] = None
 
 
 class MappingScaffolder:
@@ -91,7 +92,14 @@ class MappingScaffolder:
             if isinstance(from_value, str) and not self.is_placeholder(from_value):
                 if self._has_supported_type("from", from_value):
                     actual_from = from_value
-            requests.append(MappingRequest(name=name, to_type=to_type, from_type=actual_from))
+            requests.append(
+                MappingRequest(
+                    name=name,
+                    to_type=to_type,
+                    from_type=actual_from,
+                    existing_fields=entry.get("fields") if isinstance(entry.get("fields"), dict) else None,
+                )
+            )
 
         suggestions = self.build_map(requests, preferred_names=preferred_names)["mappings"]
         suggestion_by_to = {entry["to"]: entry for entry in suggestions}
@@ -125,6 +133,8 @@ class MappingScaffolder:
         dest_fields = self.provider.get_record_fields("to", to_type) or {}
         dest_enum_literals = self.provider.get_enum_literals("to", to_type) or []
 
+        existing_fields = req.existing_fields or {}
+
         source_type = req.from_type.strip() if req.from_type else None
         if source_type and not self._has_supported_type("from", source_type):
             source_type = None
@@ -142,6 +152,10 @@ class MappingScaffolder:
             src_lookup = {lit.lower(): lit for lit in src_literals}
             fields: Dict[str, object] = {}
             for lit in dest_enum_literals:
+                existing = existing_fields.get(lit)
+                if isinstance(existing, str) and not self.is_placeholder(existing):
+                    fields[lit] = existing
+                    continue
                 match = src_lookup.get(lit.lower())
                 fields[lit] = match if match else self._field_placeholder(lit)
             entry = {
@@ -162,16 +176,44 @@ class MappingScaffolder:
 
         for dest_name, dest_mark_raw in dest_fields.items():
             dest_mark = dest_mark_raw.strip()
+            existing_spec = existing_fields.get(dest_name)
             src_name = None
             src_mark = None
-            if dest_name.lower() in from_lookup:
-                src_name = from_lookup[dest_name.lower()]
-                src_mark = from_fields.get(src_name)
+            spec_value: Optional[object] = None
 
-            if src_name:
-                fields[dest_name] = src_name
+            if isinstance(existing_spec, str):
+                spec_clean = existing_spec.strip()
+                if self.is_placeholder(spec_clean):
+                    existing_spec = None
+                else:
+                    spec_value = existing_spec
+                    src_name = from_lookup.get(spec_clean.lower())
+                    if src_name:
+                        src_mark = from_fields.get(src_name)
+            elif isinstance(existing_spec, dict):
+                src_ref = existing_spec.get("from") or existing_spec.get("source") or existing_spec.get("path")
+                if isinstance(src_ref, str) and not self.is_placeholder(src_ref):
+                    spec_value = existing_spec
+                    src_name = from_lookup.get(src_ref.lower())
+                    if src_name:
+                        src_mark = from_fields.get(src_name)
+                else:
+                    existing_spec = None
             else:
-                fields[dest_name] = self._field_placeholder(dest_name)
+                if dest_name.lower() in from_lookup:
+                    src_name = from_lookup[dest_name.lower()]
+                    src_mark = from_fields.get(src_name)
+                    spec_value = src_name
+
+            if spec_value is None:
+                if src_name is None and dest_name.lower() in from_lookup:
+                    src_name = from_lookup[dest_name.lower()]
+                    src_mark = from_fields.get(src_name)
+                    spec_value = src_name
+                if spec_value is None:
+                    spec_value = self._field_placeholder(dest_name)
+
+            fields[dest_name] = spec_value
 
             # Nested record mapping
             if self.provider.get_record_fields("to", dest_mark):
@@ -203,13 +245,20 @@ class MappingScaffolder:
             # Enum mapping scaffold
             elif self.provider.get_enum_literals("to", dest_mark):
                 src_enum_type = None
-                if source_type and self.provider.get_enum_literals("from", source_type):
+                if src_mark and self.provider.get_enum_literals("from", src_mark.strip()):
+                    src_enum_type = src_mark.strip()
+                elif source_type and self.provider.get_enum_literals("from", source_type):
                     src_enum_type = source_type
                 elif self.provider.get_enum_literals("from", dest_mark):
                     src_enum_type = dest_mark
                 nested_name = self._preferred_names.get(dest_mark) or self._default_name(dest_mark)
                 nested_requests.append(
-                    MappingRequest(name=nested_name, to_type=dest_mark, from_type=src_enum_type)
+                    MappingRequest(
+                        name=nested_name,
+                        to_type=dest_mark,
+                        from_type=src_enum_type,
+                        existing_fields=None,
+                    )
                 )
 
         entry = {
