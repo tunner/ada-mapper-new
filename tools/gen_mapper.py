@@ -230,6 +230,30 @@ def main():
             else:
                 raise ValueError(f"Unsupported field mapping for '{d}': {spec!r}")
 
+        # Enum mapping entries (dest type is an enum)
+        to_enum_literals = provider.get_enum_literals("to", dst_type)
+        from_enum_literals = provider.get_enum_literals("from", src_type) if isinstance(src_type, str) else None
+        if to_enum_literals:
+            if isinstance(src_type, str) and src_type.strip():
+                src_enum = src_type.strip()
+                dst_enum = dst_type.strip()
+                override: dict[str, str] = {}
+                if from_enum_literals:
+                    from_lookup = {lit.lower(): lit for lit in from_enum_literals}
+                    for dest_lit, source_expr in fields.items():
+                        if not isinstance(source_expr, str):
+                            continue
+                        src_clean = source_expr.strip()
+                        if src_clean.startswith("<") and src_clean.endswith(">"):
+                            continue
+                        match = from_lookup.get(src_clean.lower())
+                        if match:
+                            override[match] = dest_lit
+                if override:
+                    mg.enum_overrides[(src_enum, dst_enum)] = override
+                mg.needed_enum_maps.add((src_enum, dst_enum))
+            continue
+
         spec_parts.append(gen_function_spec(src_type, dst_type))
         body_parts.append(_gen_with_class(mg, src_type, dst_type, fields, field_enum_overrides))
 

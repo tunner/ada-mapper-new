@@ -254,9 +254,8 @@ class LibadalangTypesProvider:
                 return None
 
     def get_enum_literals(self, domain: str, type_name: str) -> Optional[List[str]]:
-        # Minimal implementation; returns None to fall back to casts or positional mapping
         if self.lal is None:
-            return self._fallback.get_record_fields(domain, type_name) if self._fallback else None
+            return self._fallback.get_enum_literals(domain, type_name) if self._fallback else None
         lal = self.lal
         decl = self._find_type_decl(domain, type_name)
         if not decl:

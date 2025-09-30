@@ -41,8 +41,24 @@ def _validate_mapping_entry(entry: dict, mg: MapperGenerator, provider) -> List[
     to_type = to_type_raw.strip()
 
     dest_fields = provider.get_record_fields("to", to_type)
+    dest_enum_literals = provider.get_enum_literals("to", to_type)
+
     if not dest_fields:
-        errors.append(f"{ctx}: destination type '{to_type}' not found or is not a record in destination specs")
+        if dest_enum_literals:
+            errors.extend(
+                _validate_enum_entry(
+                    ctx=ctx,
+                    to_type=to_type,
+                    from_type_raw=from_type_raw,
+                    fields_entry=entry.get("fields"),
+                    dest_literals=dest_enum_literals,
+                    provider=provider,
+                )
+            )
+        else:
+            errors.append(
+                f"{ctx}: destination type '{to_type}' not found or is not a record in destination specs"
+            )
         return errors
 
     if not isinstance(from_type_raw, str) or not from_type_raw.strip():
@@ -204,5 +220,66 @@ def _validate_mapping_entry(entry: dict, mg: MapperGenerator, provider) -> List[
                 errors.append(
                     f"{ctx}: field '{dest_actual}' expects array type '{dest_type}' but source expression resolves to '{source_type}', which is not an array"
                 )
+
+    return errors
+
+
+def _validate_enum_entry(
+    ctx: str,
+    to_type: str,
+    from_type_raw: object,
+    fields_entry: object,
+    dest_literals: List[str],
+    provider,
+) -> List[str]:
+    errors: List[str] = []
+
+    if not isinstance(from_type_raw, str) or not from_type_raw.strip():
+        errors.append(f"{ctx}: source type ('from') is missing for enum mapping")
+        from_type = None
+        from_literals: List[str] = []
+    else:
+        if is_placeholder(from_type_raw):
+            errors.append(f"{ctx}: source type is still a placeholder '{from_type_raw}'")
+        from_type = from_type_raw.strip()
+        from_literals = provider.get_enum_literals("from", from_type) or []
+        if not from_literals:
+            errors.append(
+                f"{ctx}: source type '{from_type}' not found or is not an enum in source specs"
+            )
+
+    if not isinstance(fields_entry, dict):
+        errors.append(f"{ctx}: 'fields' must be an object mapping enum literals")
+        return errors
+
+    dest_lookup = {lit.lower(): lit for lit in dest_literals}
+    from_lookup = {lit.lower(): lit for lit in from_literals}
+
+    missing = [lit for lit in dest_literals if lit not in fields_entry]
+    if missing:
+        errors.append(
+            f"{ctx}: missing mappings for enum literals {', '.join(missing)} in '{to_type}'"
+        )
+
+    for dest_lit, src_spec in fields_entry.items():
+        if dest_lit not in dest_lookup.values():
+            errors.append(
+                f"{ctx}: destination literal '{dest_lit}' does not exist in enum '{to_type}'"
+            )
+            continue
+        if isinstance(src_spec, str):
+            spec_clean = src_spec.strip()
+            if is_placeholder(spec_clean):
+                errors.append(
+                    f"{ctx}: literal '{dest_lit}' still uses placeholder value '{src_spec}'"
+                )
+            elif from_lookup and spec_clean.lower() not in from_lookup:
+                errors.append(
+                    f"{ctx}: literal '{dest_lit}' references unknown source literal '{src_spec}'"
+                )
+        else:
+            errors.append(
+                f"{ctx}: literal '{dest_lit}' has unsupported mapping value {src_spec!r}"
+            )
 
     return errors
