@@ -24,6 +24,7 @@ package body Position_Mappers is
        ID => T_Unsigned_8 (X.ID),
        Position => Map(X.Position),
        Speed => Map(X.Speed),
+       Name => String (X.Name),
        Snapshots => Map(X.Snapshots)
      );
    function Map (X : Types_From.e_Position) return Types_To.T_Position is

@@ -35,12 +35,13 @@ package Types_From is
    type e_Satellite_Position_Routes is array (e_Satellite_Index range <>, e_Satellite_Path_Slot range <>) of e_Position;
    subtype e_Satellite_Route_Window is e_Satellite_Position_Routes(1 .. 3, 1 .. 2);
 
-   type e_Satellite is record
-      ID         : e_Satellite_Id;
-      Position   : e_Position;
-      Speed      : e_Speed;
-      Snapshots  : e_Position_Catalog_4;
-      Waypoints  : e_Satellite_Route_Window;
+  type e_Satellite is record
+     ID         : e_Satellite_Id;
+     Position   : e_Position;
+     Speed      : e_Speed;
+      Name       : String (1 .. 10);
+     Snapshots  : e_Position_Catalog_4;
+     Waypoints  : e_Satellite_Route_Window;
    end record;
 
    type e_Satellites      is array (e_Satellite_Index) of e_Satellite;

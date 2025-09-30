@@ -32,6 +32,7 @@ package Types_To is
       ID        : T_Unsigned_8;
       Position  : T_Position;
       Speed     : T_Speed;
+      Name      : String (1 .. 10);
       Snapshots : T_Position_Catalog_4;
    end record;
 
