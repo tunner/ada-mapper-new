@@ -89,7 +89,7 @@ class MappingScaffolder:
             from_value = entry.get("from")
             actual_from: Optional[str] = None
             if isinstance(from_value, str) and not self.is_placeholder(from_value):
-                if self._has_record_or_array("from", from_value):
+                if self._has_supported_type("from", from_value):
                     actual_from = from_value
             requests.append(MappingRequest(name=name, to_type=to_type, from_type=actual_from))
 
@@ -123,12 +123,34 @@ class MappingScaffolder:
     def _build_entry(self, req: MappingRequest) -> Tuple[Dict[str, object], List[MappingRequest]]:
         to_type = req.to_type.strip()
         dest_fields = self.provider.get_record_fields("to", to_type) or {}
+        dest_enum_literals = self.provider.get_enum_literals("to", to_type) or []
 
         source_type = req.from_type.strip() if req.from_type else None
-        if source_type and not self._has_record_or_array("from", source_type):
+        if source_type and not self._has_supported_type("from", source_type):
             source_type = None
-        if not source_type and self.provider.get_record_fields("from", to_type):
+        if not source_type and self._has_supported_type("from", to_type):
             source_type = to_type
+
+        # Enum mapping entry
+        if dest_enum_literals and not dest_fields:
+            from_value = source_type if source_type else self._from_placeholder(to_type)
+            src_literals = (
+                self.provider.get_enum_literals("from", source_type)
+                if source_type
+                else None
+            ) or []
+            src_lookup = {lit.lower(): lit for lit in src_literals}
+            fields: Dict[str, object] = {}
+            for lit in dest_enum_literals:
+                match = src_lookup.get(lit.lower())
+                fields[lit] = match if match else self._field_placeholder(lit)
+            entry = {
+                "name": self._preferred_names.get(to_type, req.name),
+                "from": from_value,
+                "to": to_type,
+                "fields": fields,
+            }
+            return entry, []
 
         from_value = source_type if source_type else self._from_placeholder(to_type)
         from_fields = self.provider.get_record_fields("from", source_type) if source_type else None
@@ -168,7 +190,7 @@ class MappingScaffolder:
                 src_elem_type = None
                 if src_mark:
                     src_elem_type = self.provider.get_array_element_type("from", src_mark.strip())
-                if src_elem_type and not self._has_record_or_array("from", src_elem_type):
+                if src_elem_type and not self._has_supported_type("from", src_elem_type):
                     src_elem_type = None
                 if not src_elem_type and self.provider.get_record_fields("from", elem_type):
                     src_elem_type = elem_type
@@ -178,6 +200,18 @@ class MappingScaffolder:
                         MappingRequest(name=nested_name, to_type=elem_type, from_type=src_elem_type)
                     )
 
+            # Enum mapping scaffold
+            elif self.provider.get_enum_literals("to", dest_mark):
+                src_enum_type = None
+                if source_type and self.provider.get_enum_literals("from", source_type):
+                    src_enum_type = source_type
+                elif self.provider.get_enum_literals("from", dest_mark):
+                    src_enum_type = dest_mark
+                nested_name = self._preferred_names.get(dest_mark) or self._default_name(dest_mark)
+                nested_requests.append(
+                    MappingRequest(name=nested_name, to_type=dest_mark, from_type=src_enum_type)
+                )
+
         entry = {
             "name": self._preferred_names.get(to_type, req.name),
             "from": from_value,
@@ -186,11 +220,13 @@ class MappingScaffolder:
         }
         return entry, nested_requests
 
-    def _has_record_or_array(self, domain: str, type_name: str) -> bool:
+    def _has_supported_type(self, domain: str, type_name: str) -> bool:
         if not type_name:
             return False
         if self.provider.get_record_fields(domain, type_name):
             return True
         if self.provider.get_array_element_type(domain, type_name):
+            return True
+        if self.provider.get_enum_literals(domain, type_name):
             return True
         return False

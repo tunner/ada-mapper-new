@@ -120,6 +120,12 @@ end Types_To;
     assert speed["from"] == "T_Speed"
     assert speed["fields"]["North"] == "North"
 
+    status = entries["T_Status"]
+    assert status["from"] == "T_Status"
+    assert status["fields"]["Good"] == "Good"
+    assert status["fields"]["Bad"] == "Bad"
+    assert status["fields"]["None"] == "None"
+
 
 def test_update_json_map_fills_placeholders(tmp_path: Path) -> None:
     src_dir = tmp_path / "src"
