@@ -31,6 +31,8 @@ class MapperGenerator:
         self.enum_overrides: Dict[TypePair, Dict[str, str]] = {}
         self.parsed_to: Dict[str, Dict[str, str]] = {}
         self.parsed_from: Dict[str, Dict[str, str]] = {}
+        self.parsed_to_lower: Dict[str, Dict[str, str]] = {}
+        self.parsed_from_lower: Dict[str, Dict[str, str]] = {}
 
     def format_record_lines(
         self, parts: List[Tuple[str, str, Optional[str]]], indent: str = "       "
@@ -65,6 +67,7 @@ class MapperGenerator:
         fields = self.provider.get_record_fields("to", base)
         if fields is not None:
             self.parsed_to[base] = fields
+            self.parsed_to_lower[base] = {k.lower(): k for k in fields}
         return fields
 
     def get_from_fields(self, tname: str) -> Optional[Dict[str, str]]:
@@ -78,6 +81,7 @@ class MapperGenerator:
         fields = self.provider.get_record_fields("from", base)
         if fields is not None:
             self.parsed_from[base] = fields
+            self.parsed_from_lower[base] = {k.lower(): k for k in fields}
         return fields
 
     # Arrays
@@ -100,7 +104,11 @@ class MapperGenerator:
             field_map = self.get_from_fields(cur_t)
             if not field_map:
                 return None
-            key = part if part in field_map else next((k for k in field_map if k.lower() == part.lower()), None)
+            base = self._base_type(cur_t)
+            lower_map = self.parsed_from_lower.get(base, {}) if base else {}
+            key = part if part in field_map else lower_map.get(part.lower())
+            if not key:
+                key = next((k for k in field_map if k.lower() == part.lower()), None)
             if not key:
                 return None
             cur_t = field_map[key].strip()
@@ -117,11 +125,14 @@ class MapperGenerator:
             if src_t and dst_t and (src_t.strip(), dst_t.strip()) in self.mapping_pairs:
                 return f"Map({src_expr})", None
             parts: List[Tuple[str, str, Optional[str]]] = []
+            from_base = self._base_type(src_t) if src_t else None
+            from_lower = self.parsed_from_lower.get(from_base, {}) if from_base else {}
             for d_name, d_ftype in to_fields.items():
                 s_name = d_name if d_name in from_fields else None
                 if not s_name:
-                    lf = {k.lower(): k for k in from_fields.keys()}
-                    s_name = lf.get(d_name.lower())
+                    s_name = from_lower.get(d_name.lower())
+                if not s_name:
+                    s_name = next((k for k in from_fields if k.lower() == d_name.lower()), None)
                 if not s_name:
                     parts.append((d_name, f"{d_ftype} ({src_expr})", None))
                     continue

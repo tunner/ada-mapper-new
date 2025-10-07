@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Dict, Protocol, List, Callable, Any
+from typing import Optional, Dict, Protocol, List, Callable, Any, Tuple
 import re
 
 
@@ -45,7 +45,7 @@ class AdaSpecIndex:
         self.records: Dict[str, Dict[str, str]] = {}
         self.arrays: Dict[str, str] = {}
         self.array_dims: Dict[str, int] = {}
-        self.enums: Dict[str, List[str]] = {}
+        self.enums: Dict[str, Tuple[str, ...]] = {}
         self.subtypes: Dict[str, str] = {}
         self.declared_types: set[str] = set()
         self._parse()
@@ -224,7 +224,7 @@ class AdaSpecIndex:
                         literals.append(lit)
                 key = self._qualified_name(stack, type_name)
                 if literals:
-                    self.enums[key] = literals
+                    self.enums[key] = tuple(literals)
                     self.declared_types.add(key)
                 i = j + 1
                 continue
@@ -251,7 +251,10 @@ class AdaSpecIndex:
         base_name = self.normalize_name(base_expr)
         if not base_name:
             return None
-        return self._resolve(base_name, lookup, seen, transform)
+        result = self._resolve(base_name, lookup, seen, transform)
+        if result is not None:
+            lookup[key] = result
+        return result
 
     def resolve_record_fields(self, name: str, seen: set[str]) -> Optional[Dict[str, str]]:
         return self._resolve(name, self.records, seen)
