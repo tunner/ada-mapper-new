@@ -79,6 +79,13 @@ def enum_map_body(mg: Any, src_enum: str, dst_enum: str) -> str:
                 )
             override[src_lookup[src_key]] = dest_lookup[dst_key]
 
+    src_pkg_parts = src_enum.split(".")[:-1] if src_enum else []
+    dst_pkg_parts = dst_enum.split(".")[:-1] if dst_enum else []
+
+    def qualify(root: str, pkg_parts: List[str], literal: str) -> str:
+        parts = [root] + pkg_parts + [literal]
+        return ".".join(part for part in parts if part)
+
     parts = []
     missing: list[str] = []
     for literal in from_enums:
@@ -88,7 +95,9 @@ def enum_map_body(mg: Any, src_enum: str, dst_enum: str) -> str:
         if target is None:
             missing.append(literal)
             continue
-        parts.append(f"when {literal} => {target}")
+        qualified_literal = qualify("Types_From", src_pkg_parts, literal)
+        qualified_target = qualify("Types_To", dst_pkg_parts, target)
+        parts.append(f"when {qualified_literal} => {qualified_target}")
 
     if missing:
         missing_desc = ", ".join(missing)

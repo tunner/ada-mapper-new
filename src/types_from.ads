@@ -10,53 +10,63 @@ package Types_From is
 
    type e_Speed_Fixed is delta 0.05 range -1_000.0 .. 1_000.0;
 
-   type e_Speed is record
-      North : e_Speed_Fixed;
-      East  : e_Speed_Fixed;
-      Down  : e_Speed_Fixed;
-   end record;
+   package Telemetry is
+      type e_Speed is record
+         North : e_Speed_Fixed;
+         East  : e_Speed_Fixed;
+         Down  : e_Speed_Fixed;
+      end record;
 
-   type e_Speed_Buffer  is array (Positive range <>) of e_Speed;
-   subtype e_Speed_Buffer_2 is e_Speed_Buffer(1 .. 2);
+      type e_Speed_Buffer  is array (Positive range <>) of e_Speed;
+      subtype e_Speed_Buffer_2 is e_Speed_Buffer(1 .. 2);
 
-   type e_Position is record
-      Latitude        : e_Latitude_F32;
-      Longitude       : e_Longitude_F32;
-      Heading         : e_Fixed_Angle;
-      Speed_History   : e_Speed_Buffer_2;
-   end record;
+      type e_Position is record
+         Latitude      : e_Latitude_F32;
+         Longitude     : e_Longitude_F32;
+         Heading       : e_Fixed_Angle;
+         Speed_History : e_Speed_Buffer_2;
+      end record;
 
-   type e_Position_Catalog  is array (Positive range <>) of e_Position;
-   subtype e_Position_Catalog_4 is e_Position_Catalog(1 .. 4);
+      type e_Position_Catalog  is array (Positive range <>) of e_Position;
+      subtype e_Position_Catalog_4 is e_Position_Catalog(1 .. 4);
+
+      --  Enum for demonstration
+      type e_Status is (Unknown, Good, Bad);
+   end Telemetry;
+
+   package Diagnostics is
+      type e_Speed is record
+         Surge : e_Speed_Fixed;
+         Sway  : e_Speed_Fixed;
+         Heave : e_Speed_Fixed;
+      end record;
+   end Diagnostics;
 
    subtype e_Satellite_Index is Positive range 1 .. 12;
    subtype e_Satellite_Path_Slot is Positive range 1 .. 6;
 
-   type e_Satellite_Position_Routes is array (e_Satellite_Index range <>, e_Satellite_Path_Slot range <>) of e_Position;
+   type e_Satellite_Position_Routes is array (e_Satellite_Index range <>, e_Satellite_Path_Slot range <>) of Telemetry.e_Position;
    subtype e_Satellite_Route_Window is e_Satellite_Position_Routes(1 .. 3, 1 .. 2);
 
-  type e_Satellite is record
-     ID         : e_Satellite_Id;
-     Position   : e_Position;
-     Speed      : e_Speed;
+   type e_Satellite is record
+      ID         : e_Satellite_Id;
+      Position   : Telemetry.e_Position;
+      Speed      : Telemetry.e_Speed;
       Name       : String (1 .. 10);
-     Snapshots  : e_Position_Catalog_4;
-     Waypoints  : e_Satellite_Route_Window;
+      Snapshots  : Telemetry.e_Position_Catalog_4;
+      Waypoints  : e_Satellite_Route_Window;
    end record;
 
    type e_Satellites      is array (e_Satellite_Index) of e_Satellite;
-   type e_Satellite_Refs  is array (e_Satellite_Index) of e_Position;
-
-   --  Enum for demonstration
-   type e_Status is (Unknown, Good, Bad);
+   type e_Satellite_Refs  is array (e_Satellite_Index) of Telemetry.e_Position;
 
    type T_Position_From_GPS is record
-      FR_Position        : e_Position;
-      FR_Speed           : e_Speed;
+      FR_Position        : Telemetry.e_Position;
+      FR_Speed           : Telemetry.e_Speed;
       FR_Satellites      : e_Satellites;
       FR_Sat_Pos_Refs    : e_Satellite_Refs;
       FR_Sat_Routes      : e_Satellite_Route_Window;
-      FR_Status          : e_Status;
+      FR_Status          : Telemetry.e_Status;
    end record;
 
 end Types_From;

@@ -57,9 +57,9 @@ end Types_To;
     )
     assert "function Map (E : Types_From.Status_F) return Types_To.Status_T" in body
     assert "(case E is" in body
-    assert "when Unknown => Unknown" in body
-    assert "when Good => Good" in body
-    assert "when Bad => Bad" in body
+    assert "when Types_From.Unknown => Types_To.Unknown" in body
+    assert "when Types_From.Good => Types_To.Good" in body
+    assert "when Types_From.Bad => Types_To.Bad" in body
     assert "S => Map(X.S)" in body
 
 
@@ -103,7 +103,9 @@ end Types_To;
         },
     )
     assert "function Map (E : Types_From.Color_F) return Types_To.Color_T" in body
-    assert "when Red => Cyan" in body and "when Green => Magenta" in body and "when Blue => Yellow" in body
+    assert "when Types_From.Red => Types_To.Cyan" in body
+    assert "when Types_From.Green => Types_To.Magenta" in body
+    assert "when Types_From.Blue => Types_To.Yellow" in body
     assert "C => Map(X.C)" in body
 
 
@@ -146,6 +148,6 @@ end Types_To;
             ]
         },
     )
-    assert "when Alpha => Alpha" in body
-    assert "when Gamma => Gamma" in body
-    assert "when C_Delta => Delta" in body
+    assert "when Types_From.Alpha => Types_To.Alpha" in body
+    assert "when Types_From.Gamma => Types_To.Gamma" in body
+    assert "when Types_From.C_Delta => Types_To.Delta" in body

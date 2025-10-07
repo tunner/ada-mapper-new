@@ -13,7 +13,7 @@ package body Position_Mappers is
        Sat_Position_Refs => Map(X.FR_Sat_Pos_Refs),
        Sat_Routes => Map(X.FR_Sat_Routes)
      );
-   function Map (X : Types_From.e_Speed) return Types_To.T_Speed is
+   function Map (X : Types_From.Telemetry.e_Speed) return Types_To.Telemetry.T_Speed is
      (
        North => T_Speed_Fraction (X.North),
        East => T_Speed_Fraction (X.East),
@@ -27,15 +27,23 @@ package body Position_Mappers is
        Name => String (X.Name),
        Snapshots => Map(X.Snapshots)
      );
-   function Map (X : Types_From.e_Position) return Types_To.T_Position is
+   function Map (X : Types_From.Telemetry.e_Position) return Types_To.Telemetry.T_Position is
      (
        Lat => T_Latitude_Count (X.Latitude),
        Lon => T_Longitude_Count (X.Longitude),
        Heading_Track => T_Fixed_Angle (X.Heading),
        Recent_Speeds => Map(X.Speed_History)
      );
-   function Map (A : Types_From.e_Position_Catalog_4) return Types_To.T_Position_Catalog_4 is
-      R : Types_To.T_Position_Catalog_4;
+   function Map (A : Types_From.Telemetry.e_Position_Catalog_4) return Types_To.Telemetry.T_Position_Catalog_4 is
+      R : Types_To.Telemetry.T_Position_Catalog_4;
+   begin
+      for I in R'Range loop
+         R(I) := Map(A(I));
+      end loop;
+      return R;
+   end Map;
+   function Map (A : Types_From.Telemetry.e_Speed_Buffer_2) return Types_To.Telemetry.T_Speed_Buffer_2 is
+      R : Types_To.Telemetry.T_Speed_Buffer_2;
    begin
       for I in R'Range loop
          R(I) := Map(A(I));
@@ -68,19 +76,11 @@ package body Position_Mappers is
       end loop;
       return R;
    end Map;
-   function Map (A : Types_From.e_Speed_Buffer_2) return Types_To.T_Speed_Buffer_2 is
-      R : Types_To.T_Speed_Buffer_2;
-   begin
-      for I in R'Range loop
-         R(I) := Map(A(I));
-      end loop;
-      return R;
-   end Map;
-   function Map (E : Types_From.e_Status) return Types_To.T_Status is
+   function Map (E : Types_From.Telemetry.e_Status) return Types_To.Telemetry.T_Status is
      (case E is
-        when Unknown => None,
-        when Good => Good,
-        when Bad => Bad
+        when Types_From.Telemetry.Unknown => Types_To.Telemetry.None,
+        when Types_From.Telemetry.Good => Types_To.Telemetry.Good,
+        when Types_From.Telemetry.Bad => Types_To.Telemetry.Bad
      );
 
 end Position_Mappers;

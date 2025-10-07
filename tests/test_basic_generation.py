@@ -262,6 +262,107 @@ end Types_To;
     assert "R(I) := Byte_To (A(I));" in body
 
 
+def test_nested_package_resolution(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   package P_Message_1 is
+      type e_Speed is record
+         North : Integer;
+         East  : Integer;
+         Down  : Integer;
+      end record;
+      type e_Speed_List is array (Positive range <>) of e_Speed;
+   end P_Message_1;
+
+   package P_Message_2 is
+      type e_Speed is record
+         X : Integer;
+         Y : Integer;
+         Z : Integer;
+      end record;
+      type e_Speed_List is array (Positive range <>) of e_Speed;
+   end P_Message_2;
+
+   type Fleet is record
+      Speeds : P_Message_1.e_Speed_List;
+   end record;
+end Types_From;
+""".strip(),
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   package P_Message_1 is
+      type T_Speed is record
+         North : Integer;
+         East  : Integer;
+         Down  : Integer;
+      end record;
+      type T_Speed_List is array (Positive range <>) of T_Speed;
+   end P_Message_1;
+
+   package P_Message_2 is
+      type T_Speed is record
+         X : Integer;
+         Y : Integer;
+         Z : Integer;
+      end record;
+      type T_Speed_List is array (Positive range <>) of T_Speed;
+   end P_Message_2;
+
+   type Fleet_To is record
+      Speeds : P_Message_1.T_Speed_List;
+   end record;
+end Types_To;
+""".strip(),
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Fleet",
+                        "from": "Fleet",
+                        "to": "Fleet_To",
+                        "fields": {"Speeds": "Speeds"},
+                    },
+                    {
+                        "name": "Speed",
+                        "from": "P_Message_1.e_Speed",
+                        "to": "P_Message_1.T_Speed",
+                        "fields": {"North": "North", "East": "East", "Down": "Down"},
+                    },
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.P_Message_1.e_Speed) return Types_To.P_Message_1.T_Speed" in body
+    assert "North => Integer (X.North)" in body
+    assert "function Map (A : Types_From.P_Message_1.e_Speed_List) return Types_To.P_Message_1.T_Speed_List" in body
+    assert "R(I) := Map(A(I));" in body
+    assert "Types_From.P_Message_2.e_Speed" not in body
+
+
 def test_generation_fails_when_placeholders_remain(tmp_path: Path):
     src_dir = tmp_path / "src"
     types_from = src_dir / "types_from.ads"
