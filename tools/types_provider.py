@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Dict, Protocol, List
+from typing import Optional, Dict, Protocol, List, Callable, Any
 import re
 
 
@@ -224,12 +224,19 @@ class AdaSpecIndex:
 
             i += 1
 
-    def resolve_record_fields(self, name: str, seen: set[str]) -> Optional[Dict[str, str]]:
+    def _resolve(
+        self,
+        name: str,
+        lookup: Dict[str, Any],
+        seen: set[str],
+        transform: Optional[Callable[[Any], Any]] = None,
+    ) -> Optional[Any]:
         key = self.normalize_name(name)
         if not key or key in seen:
             return None
-        if key in self.records:
-            return self.records[key]
+        if key in lookup:
+            value = lookup[key]
+            return transform(value) if transform else value
         seen.add(key)
         base_expr = self.subtypes.get(key)
         if not base_expr:
@@ -237,52 +244,19 @@ class AdaSpecIndex:
         base_name = self.normalize_name(base_expr)
         if not base_name:
             return None
-        return self.resolve_record_fields(base_name, seen)
+        return self._resolve(base_name, lookup, seen, transform)
+
+    def resolve_record_fields(self, name: str, seen: set[str]) -> Optional[Dict[str, str]]:
+        return self._resolve(name, self.records, seen)
 
     def resolve_array_element(self, name: str, seen: set[str]) -> Optional[str]:
-        key = self.normalize_name(name)
-        if not key or key in seen:
-            return None
-        if key in self.arrays:
-            return self._clean_reference(self.arrays[key])
-        seen.add(key)
-        base_expr = self.subtypes.get(key)
-        if not base_expr:
-            return None
-        base_name = self.normalize_name(base_expr)
-        if not base_name:
-            return None
-        return self.resolve_array_element(base_name, seen)
+        return self._resolve(name, self.arrays, seen, self._clean_reference)
 
     def resolve_array_dimension(self, name: str, seen: set[str]) -> Optional[int]:
-        key = self.normalize_name(name)
-        if not key or key in seen:
-            return None
-        if key in self.array_dims:
-            return self.array_dims[key]
-        seen.add(key)
-        base_expr = self.subtypes.get(key)
-        if not base_expr:
-            return None
-        base_name = self.normalize_name(base_expr)
-        if not base_name:
-            return None
-        return self.resolve_array_dimension(base_name, seen)
+        return self._resolve(name, self.array_dims, seen)
 
     def resolve_enum_literals(self, name: str, seen: set[str]) -> Optional[List[str]]:
-        key = self.normalize_name(name)
-        if not key or key in seen:
-            return None
-        if key in self.enums:
-            return self.enums[key]
-        seen.add(key)
-        base_expr = self.subtypes.get(key)
-        if not base_expr:
-            return None
-        base_name = self.normalize_name(base_expr)
-        if not base_name:
-            return None
-        return self.resolve_enum_literals(base_name, seen)
+        return self._resolve(name, self.enums, seen, lambda items: list(items))
 
 
 class RegexTypesProvider:

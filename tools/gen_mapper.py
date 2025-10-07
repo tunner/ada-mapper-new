@@ -25,7 +25,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from records import parse_record_components
 from arrays import parse_array_component_type, array_map_spec, array_map_body
 from enums import enum_map_spec, enum_map_body
 from generator import MapperGenerator
