@@ -6,6 +6,21 @@ from typing import Optional, Dict, Protocol, List, Callable, Any
 import re
 
 
+QUALIFIER_RE = re.compile(r"\b(?:aliased|not\s+null|access|constant)\b", re.IGNORECASE)
+PACKAGE_START_RE = re.compile(r"^\s*package\s+([A-Za-z0-9_.]+)\s+is\b", re.IGNORECASE)
+PACKAGE_END_RE = re.compile(r"^\s*end\s+([A-Za-z0-9_.]+)?\s*;", re.IGNORECASE)
+SUBTYPE_RE = re.compile(r"^\s*subtype\s+([A-Za-z]\w*)\s+is\s+(.+?);", re.IGNORECASE)
+RECORD_START_RE = re.compile(r"^\s*type\s+([A-Za-z]\w*)\s+is\s+record\b", re.IGNORECASE)
+FIELD_RE = re.compile(r"^\s*([A-Za-z]\w*)\s*:\s*([^;]+);")
+END_RECORD_RE = re.compile(r"\bend\s+record\b", re.IGNORECASE)
+ARRAY_DECL_RE = re.compile(
+    r"^\s*type\s+([A-Za-z]\w*)\s+is\s+array\s*\(([^)]*)\)\s*of\s+([^;]+);",
+    re.IGNORECASE,
+)
+ENUM_START_RE = re.compile(r"^\s*type\s+([A-Za-z]\w*)\s+is\s*\((.*)", re.IGNORECASE)
+ENUM_CLOSE_RE = re.compile(r"\)\s*;")
+
+
 class TypesProvider(Protocol):
     def get_record_fields(self, domain: str, type_name: str) -> Optional[Dict[str, str]]:
         ...
@@ -50,10 +65,7 @@ class AdaSpecIndex:
 
     def _clean_reference(self, ref: str) -> str:
         cleaned = ref.split("--", 1)[0]
-        cleaned = re.sub(r"\baliased\b", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\bnot\s+null\b", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\baccess\b", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\bconstant\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = QUALIFIER_RE.sub("", cleaned)
         cleaned = " ".join(cleaned.split())
         return cleaned.strip()
 
@@ -104,7 +116,7 @@ class AdaSpecIndex:
                 i += 1
                 continue
 
-            pkg_start = re.match(r"^\s*package\s+([A-Za-z0-9_.]+)\s+is\b", stripped, re.IGNORECASE)
+            pkg_start = PACKAGE_START_RE.match(stripped)
             if pkg_start:
                 name = pkg_start.group(1)
                 parts = name.split(".")
@@ -122,7 +134,7 @@ class AdaSpecIndex:
                 i += 1
                 continue
 
-            pkg_end = re.match(r"^\s*end\s+([A-Za-z0-9_.]+)?\s*;", stripped, re.IGNORECASE)
+            pkg_end = PACKAGE_END_RE.match(stripped)
             if pkg_end:
                 name = pkg_end.group(1)
                 if stack:
@@ -141,7 +153,7 @@ class AdaSpecIndex:
                 i += 1
                 continue
 
-            subtype_match = re.match(r"^\s*subtype\s+([A-Za-z]\w*)\s+is\s+(.+?);", stripped, re.IGNORECASE)
+            subtype_match = SUBTYPE_RE.match(stripped)
             if subtype_match:
                 type_name = subtype_match.group(1)
                 base_expr = subtype_match.group(2)
@@ -152,18 +164,17 @@ class AdaSpecIndex:
                 i += 1
                 continue
 
-            record_match = re.match(r"^\s*type\s+([A-Za-z]\w*)\s+is\s+record\b", stripped, re.IGNORECASE)
+            record_match = RECORD_START_RE.match(stripped)
             if record_match:
                 type_name = record_match.group(1)
                 fields: Dict[str, str] = {}
                 j = i + 1
-                field_re = re.compile(r"^\s*([A-Za-z]\w*)\s*:\s*([^;]+);")
                 current_segments = self._current_segments(stack)
                 while j < len(lines):
                     inner = lines[j]
-                    if re.search(r"\bend\s+record\b", inner, re.IGNORECASE):
+                    if END_RECORD_RE.search(inner):
                         break
-                    m_field = field_re.match(inner)
+                    m_field = FIELD_RE.match(inner)
                     if m_field:
                         fname = m_field.group(1).strip()
                         ftype = m_field.group(2).split("--", 1)[0].strip()
@@ -178,11 +189,7 @@ class AdaSpecIndex:
                 i = j + 1
                 continue
 
-            array_match = re.match(
-                r"^\s*type\s+([A-Za-z]\w*)\s+is\s+array\s*\(([^)]*)\)\s*of\s+([^;]+);",
-                stripped,
-                re.IGNORECASE,
-            )
+            array_match = ARRAY_DECL_RE.match(stripped)
             if array_match:
                 type_name = array_match.group(1)
                 index_text = array_match.group(2)
@@ -195,13 +202,13 @@ class AdaSpecIndex:
                 i += 1
                 continue
 
-            enum_match = re.match(r"^\s*type\s+([A-Za-z]\w*)\s+is\s*\((.*)", stripped, re.IGNORECASE)
+            enum_match = ENUM_START_RE.match(stripped)
             if enum_match:
                 type_name = enum_match.group(1)
                 rest = enum_match.group(2)
                 body_lines = [rest]
                 j = i
-                while not re.search(r"\)\s*;", body_lines[-1]) and j + 1 < len(lines):
+                while not ENUM_CLOSE_RE.search(body_lines[-1]) and j + 1 < len(lines):
                     j += 1
                     body_lines.append(lines[j].strip())
                 combined = " ".join(body_lines)
