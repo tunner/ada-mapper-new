@@ -1,2 +1,0 @@
-main.adb:14:44: error: expected type "Float16" defined at types_to.ads:2
-main.adb:14:44: error: found type "T_Integer16" defined at types_to.ads:3

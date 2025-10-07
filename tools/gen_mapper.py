@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -78,9 +79,20 @@ def run_compile(outdir: Path) -> int:
     Returns the subprocess return code. If gnatmake is not found, returns 127.
     """
     mapper = outdir / "position_mappers.adb"
-    cmd = ["gnatmake", "-q", "-c", f"-I{outdir}", str(mapper)]
+    obj_dir = outdir.parent / "obj"
+    obj_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "gnatmake",
+        "-q",
+        "-c",
+        "-D",
+        str(obj_dir),
+        f"-I{outdir}",
+        str(mapper),
+    ]
+    cwd = str(outdir.parent)
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     except FileNotFoundError:
         sys.stderr.write(
             "Validation failed: gnatmake not found on PATH. Please install GNAT and ensure 'gnatmake' is available.\n"
@@ -91,7 +103,15 @@ def run_compile(outdir: Path) -> int:
     else:
         sys.stderr.write(res.stdout)
         sys.stderr.write(res.stderr)
-    return res.returncode
+        return res.returncode
+
+    try:
+        #  Remove build products from validation to keep the repo clean
+        shutil.rmtree(obj_dir)
+    except OSError as exc:
+        sys.stderr.write(f"Warning: failed to clean validation artifacts: {exc}\n")
+
+    return 0
 
 
 def main():
