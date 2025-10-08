@@ -266,6 +266,19 @@ class MappingScaffolder:
             elem_type = self.provider.get_array_element_type("to", dest_mark)
             dest_enum = self.provider.get_enum_literals("to", dest_mark)
 
+            if (
+                isinstance(spec_value, str)
+                and "." in spec_value
+                and source_type
+                and not self.is_placeholder(spec_value)
+            ):
+                resolved_type = self._resolve_path_type(source_type, spec_value)
+                if not resolved_type:
+                    raise ValueError(
+                        f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references unknown source path '{spec_value}'"
+                    )
+                src_mark = resolved_type
+
             if isinstance(spec_value, str) and self.is_placeholder(spec_value):
                 suggestion = None
                 if elem_type:

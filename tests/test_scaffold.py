@@ -139,9 +139,18 @@ def test_update_json_map_fills_placeholders(tmp_path: Path) -> None:
         src_dir / "types_from.ads",
         """
 package Types_From is
+   type Sat is record
+      ID : Integer;
+   end record;
+   type Sats is array (1 .. 3) of Sat;
+   type Sat_List is record
+      Count : Integer;
+      List  : Sats;
+   end record;
    type Foo_To is record
       Speed_North : Integer;
       Speed_South : Integer;
+      Satellites  : Sat_List;
    end record;
 end Types_From;
 """.strip(),
@@ -150,9 +159,14 @@ end Types_From;
         src_dir / "types_to.ads",
         """
 package Types_To is
+   type Sat is record
+      ID : Integer;
+   end record;
+   type Sats is array (1 .. 3) of Sat;
    type Foo_To is record
       Speed_North : Integer;
       Speed_South : Integer;
+      Satellites  : Sats;
    end record;
 end Types_To;
 """.strip(),
@@ -167,6 +181,7 @@ end Types_To;
                 "fields": {
                     "Speed_North": "<SPEED_NORTH_INPUT_FIELD>",
                     "Speed_South": "Speed_South",
+                    "Satellites": "Satellites.List",
                 },
             }
         ]
@@ -189,7 +204,10 @@ end Types_To;
     foo = by_to["Foo_To"]
     assert foo["fields"]["Speed_North"] == "Speed_North"
     assert foo["fields"]["Speed_South"] == "Speed_South"
+    assert foo["fields"]["Satellites"] == "Satellites.List"
     assert foo["from"] == "Foo_To"
+    sat_entry = by_to["Sat"]
+    assert sat_entry["from"] == "Sat"
 
 
 def test_init_json_map_errors_when_type_missing(tmp_path: Path) -> None:
