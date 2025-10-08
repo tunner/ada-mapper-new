@@ -55,6 +55,10 @@ class MappingScaffolder:
         self._preferred_names = dict(preferred_names or {})
         for req in requests:
             self._preferred_names.setdefault(req.to_type, req.name)
+        requested_pairs: Set[Tuple[str, str]] = {
+            ((req.from_type or "").strip(), req.to_type.strip()) for req in requests
+        }
+        requested_targets: Set[str] = {req.to_type.strip() for req in requests}
         result: List[Dict[str, object]] = []
 
         while queue:
@@ -69,6 +73,11 @@ class MappingScaffolder:
             result.append(entry)
             for nested in nested_requests:
                 self._preferred_names.setdefault(nested.to_type, nested.name)
+                nested_key = ((nested.from_type or "").strip(), nested.to_type.strip())
+                if nested.to_type.strip() in requested_targets:
+                    continue
+                requested_pairs.add(nested_key)
+                requested_targets.add(nested.to_type.strip())
                 queue.append(nested)
 
         return {"mappings": result}
@@ -131,30 +140,25 @@ class MappingScaffolder:
                 ):
                     existing["from"] = sugg_from
                     changed = True
-                elif (
-                    isinstance(sugg_from, str)
-                    and self.is_placeholder(sugg_from)
-                    and isinstance(existing_from, str)
-                    and not self.is_placeholder(existing_from)
-                ):
-                    existing["from"] = sugg_from
-                    changed = True
                 # update fields selectively
                 existing_fields = existing.setdefault("fields", {})
                 if isinstance(existing_fields, dict):
                     for field_name, sugg_value in suggestion.get("fields", {}).items():
                         current_value = existing_fields.get(field_name)
-                        if (current_value is None or self.is_placeholder(current_value)) and not self.is_placeholder(sugg_value):
-                            existing_fields[field_name] = sugg_value
-                            changed = True
-                        elif (
-                            isinstance(sugg_value, str)
-                            and self.is_placeholder(sugg_value)
-                            and isinstance(current_value, str)
-                            and not self.is_placeholder(current_value)
-                        ):
-                            existing_fields[field_name] = sugg_value
-                            changed = True
+                        if isinstance(sugg_value, dict):
+                            if not isinstance(current_value, dict) or current_value != sugg_value:
+                                existing_fields[field_name] = sugg_value
+                                changed = True
+                            continue
+                        if isinstance(sugg_value, str) and not self.is_placeholder(sugg_value):
+                            if current_value != sugg_value:
+                                existing_fields[field_name] = sugg_value
+                                changed = True
+                            continue
+                        if isinstance(sugg_value, str) and self.is_placeholder(sugg_value):
+                            if not isinstance(current_value, str) or not self.is_placeholder(current_value):
+                                existing_fields[field_name] = sugg_value
+                                changed = True
             else:
                 mappings.append(suggestion)
                 changed = True
@@ -274,9 +278,17 @@ class MappingScaffolder:
             ):
                 resolved_type = self._resolve_path_type(source_type, spec_value)
                 if not resolved_type:
-                    raise ValueError(
-                        f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references unknown source path '{spec_value}'"
-                    )
+                    alt = None
+                    if elem_type:
+                        alt = self._find_array_source_path(
+                            source_type, dest_name, dest_mark, elem_type
+                        )
+                    if alt:
+                        spec_value, resolved_type = alt
+                    if not resolved_type:
+                        raise ValueError(
+                            f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references unknown source path '{spec_value}'"
+                        )
                 src_mark = resolved_type
 
             if isinstance(spec_value, str) and self.is_placeholder(spec_value):

@@ -210,6 +210,64 @@ end Types_To;
     assert sat_entry["from"] == "Sat"
 
 
+def test_update_json_map_does_not_reintroduce_placeholders(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src"
+    write(
+        src_dir / "types_from.ads",
+        """
+package Types_From is
+   type Item is record
+      Value : Integer;
+   end record;
+   type Items is array (1 .. 4) of Item;
+   type Record_From is record
+      Items_Field : Items;
+   end record;
+end Types_From;
+""".strip(),
+    )
+    write(
+        src_dir / "types_to.ads",
+        """
+package Types_To is
+   type Item is record
+      Value : Integer;
+   end record;
+   type Items is array (1 .. 4) of Item;
+   type Record_To is record
+      Items_Field : Items;
+   end record;
+end Types_To;
+""".strip(),
+    )
+
+    mappings = {
+        "mappings": [
+            {
+                "name": "Record",
+                "from": "Record_From",
+                "to": "Record_To",
+                "fields": {"Items_Field": "Items_Field"},
+            }
+        ]
+    }
+    mappings_path = tmp_path / "mappings.json"
+    mappings_path.write_text(json.dumps(mappings, indent=2))
+
+    # First update should keep explicit mapping and add element mapping.
+    result = run_cli(tmp_path, [str(mappings_path), str(src_dir), "--update-json-map"])
+    assert result.returncode == 0, result.stderr + result.stdout
+    first = json.loads(mappings_path.read_text())
+    entries = {entry["to"]: entry for entry in first["mappings"]}
+    assert entries["Record_To"]["from"] == "Record_From"
+    # Run update again: should not flip Items mapping back to placeholder.
+    result = run_cli(tmp_path, [str(mappings_path), str(src_dir), "--update-json-map"])
+    assert result.returncode == 0, result.stderr + result.stdout
+    second = json.loads(mappings_path.read_text())
+    entries = {entry["to"]: entry for entry in second["mappings"]}
+    assert entries["Record_To"]["fields"]["Items_Field"] == "Items_Field"
+
+
 def test_init_json_map_errors_when_type_missing(tmp_path: Path) -> None:
     src_dir = tmp_path / "src"
     write(
