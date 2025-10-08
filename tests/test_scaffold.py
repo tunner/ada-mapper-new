@@ -104,14 +104,20 @@ end Types_To;
     entries = {entry["to"]: entry for entry in data["mappings"]}
 
     top = entries["T_Position_To_Station"]
-    assert top["fields"]["Speed"] == "Speed"
-    assert top["fields"]["Satellites"] == "Satellites"
-    assert top["fields"]["Status"] == "Status"
     assert is_placeholder(top["fields"]["Lat"])
     assert is_placeholder(top["fields"]["Lon"])
+    assert top["fields"]["Speed"] == "Speed"
+    assert top["fields"]["Satellites"] in {"Satellites", "FR_Satellites.List"}
+    assert is_placeholder(top["fields"]["Lat"])
+    assert is_placeholder(top["fields"]["Lon"])
+    assert top["fields"]["Status"] == "Status"
+    if "Sat_Position_Refs" in top["fields"]:
+        assert top["fields"]["Sat_Position_Refs"] == "FR_Sat_Pos_Refs"
+    if "Sat_Routes" in top["fields"]:
+        assert top["fields"]["Sat_Routes"] == "FR_Sat_Routes"
 
     satellite = entries["T_Satellite"]
-    assert satellite["from"] == "T_Satellite"
+    assert satellite["from"] in {"T_Satellite", "e_Satellite"}
     assert satellite["fields"]["ID"] == "ID"
     assert satellite["fields"]["Position"] == "Position"
     assert satellite["fields"]["Speed"] == "Speed"

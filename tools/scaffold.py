@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import re
 
 from constants import DEFAULT_SENTINEL
@@ -262,6 +262,23 @@ class MappingScaffolder:
                 if spec_value is None:
                     spec_value = self._field_placeholder(dest_name)
 
+            dest_record_fields = self.provider.get_record_fields("to", dest_mark)
+            elem_type = self.provider.get_array_element_type("to", dest_mark)
+            dest_enum = self.provider.get_enum_literals("to", dest_mark)
+
+            if isinstance(spec_value, str) and self.is_placeholder(spec_value):
+                suggestion = None
+                if elem_type:
+                    suggestion = self._find_array_source_path(
+                        source_type, dest_name, dest_mark, elem_type
+                    )
+                if suggestion:
+                    suggested_path, suggested_type = suggestion
+                    resolved_type = self._resolve_path_type(source_type, suggested_path)
+                    if resolved_type:
+                        spec_value = suggested_path
+                        src_mark = resolved_type
+
             fields[dest_name] = spec_value
 
             # Nested record mapping
@@ -274,7 +291,6 @@ class MappingScaffolder:
                 if src_mark_clean
                 else None
             )
-            dest_record_fields = self.provider.get_record_fields("to", dest_mark)
             if dest_record_fields is not None:
                 nested_from_type = src_mark.strip() if src_mark else None
                 if nested_from_type and not self.provider.get_record_fields("from", nested_from_type):
@@ -290,7 +306,6 @@ class MappingScaffolder:
                 )
 
             # Nested array mapping (focus on element records)
-            elem_type = self.provider.get_array_element_type("to", dest_mark)
             if elem_type:
                 src_elem_type = None
                 if src_mark:
@@ -311,7 +326,6 @@ class MappingScaffolder:
                 )
 
             # Enum mapping scaffold
-            dest_enum = self.provider.get_enum_literals("to", dest_mark)
             if dest_enum:
                 src_enum_type = None
                 if src_mark and self.provider.get_enum_literals("from", src_mark.strip()):
@@ -345,6 +359,86 @@ class MappingScaffolder:
             "fields": fields,
         }
         return entry, nested_requests
+
+    @staticmethod
+    def _canonical_name(value: Optional[str]) -> str:
+        if not value:
+            return ""
+        base = value.split(".")[-1].lower()
+        base = re.sub(r"^(?:t_|e_|p_|fr_|fs_|gs_|l_|r_|m_|n_)", "", base)
+        return base
+
+    def _resolve_path_type(self, root_type: Optional[str], path: str) -> Optional[str]:
+        if not root_type or not path:
+            return None
+        current = root_type
+        for segment in path.split('.'):
+            fields = self.provider.get_record_fields("from", current)
+            if not fields:
+                return None
+            mark = fields.get(segment)
+            if mark is None:
+                lowered = segment.lower()
+                for name, candidate in fields.items():
+                    if name.lower() == lowered:
+                        mark = candidate
+                        break
+            if mark is None:
+                return None
+            current = mark.strip()
+        return current
+
+    def _find_array_source_path(
+        self,
+        source_type: Optional[str],
+        dest_field_name: str,
+        dest_array_type: str,
+        dest_element_type: Optional[str],
+    ) -> Optional[Tuple[str, str]]:
+        if not source_type:
+            return None
+        target_array_canon = self._canonical_name(dest_array_type)
+        target_elem_canon = self._canonical_name(dest_element_type)
+        dest_field_canon = self._canonical_name(dest_field_name)
+        visited: Set[str] = set()
+
+        def visit(type_name: str, prefix: str) -> Optional[Tuple[str, str, int]]:
+            fields = self.provider.get_record_fields("from", type_name)
+            if not fields:
+                return None
+            best: Optional[Tuple[str, str, int]] = None
+            for field, mark in fields.items():
+                mark_clean = mark.strip()
+                path = f"{prefix}{field}" if prefix else field
+                array_elem = self.provider.get_array_element_type("from", mark_clean)
+                if array_elem:
+                    field_canon = self._canonical_name(field)
+                    array_canon = self._canonical_name(mark_clean)
+                    elem_canon = self._canonical_name(array_elem)
+                    score = 0
+                    if field_canon == dest_field_canon:
+                        score = 3
+                    elif array_canon == target_array_canon:
+                        score = 2
+                    elif target_elem_canon and elem_canon == target_elem_canon:
+                        score = 1
+                    if score > 0:
+                        candidate = (path, mark_clean, score)
+                        if not best or candidate[2] > best[2]:
+                            best = candidate
+                record_fields = self.provider.get_record_fields("from", mark_clean)
+                if record_fields is not None and mark_clean not in visited:
+                    visited.add(mark_clean)
+                    child = visit(mark_clean, f"{path}.")
+                    if child and (not best or child[2] > best[2]):
+                        best = child
+            return best
+
+        visited.add(source_type)
+        result = visit(source_type, "")
+        if result:
+            return result[0], result[1]
+        return None
 
     def _has_supported_type(self, domain: str, type_name: str) -> bool:
         if not type_name:
