@@ -187,7 +187,11 @@ def main():
                 "Invalid mapping specification. Use NAME:FROM:TO or FROM:TO (e.g. Position:T_From:T_To)."
             )
             sys.exit(1)
-        scaffold = scaffolder.build_map(requests)
+        try:
+            scaffold = scaffolder.build_map(requests)
+        except ValueError as exc:
+            sys.stderr.write(f"Failed to initialize {mappings_path}: {exc}\n")
+            sys.exit(1)
         mappings_path.write_text(json.dumps(scaffold, indent=2) + "\n")
         print(f"Initialized {mappings_path}")
         return
@@ -195,7 +199,11 @@ def main():
     if args.update_json_map:
         scaffolder = MappingScaffolder(provider)
         data = json.loads(mappings_path.read_text())
-        changed = scaffolder.update_map(data)
+        try:
+            changed = scaffolder.update_map(data)
+        except ValueError as exc:
+            sys.stderr.write(f"Failed to update {mappings_path}: {exc}\n")
+            sys.exit(1)
         if changed:
             mappings_path.write_text(json.dumps(data, indent=2) + "\n")
             print(f"Updated {mappings_path}")

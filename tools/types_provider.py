@@ -10,15 +10,14 @@ QUALIFIER_RE = re.compile(r"\b(?:aliased|not\s+null|access|constant)\b", re.IGNO
 PACKAGE_START_RE = re.compile(r"^\s*package\s+([A-Za-z0-9_.]+)\s+is\b", re.IGNORECASE)
 PACKAGE_END_RE = re.compile(r"^\s*end\s+([A-Za-z0-9_.]+)?\s*;", re.IGNORECASE)
 SUBTYPE_RE = re.compile(r"^\s*subtype\s+([A-Za-z]\w*)\s+is\s+(.+?);", re.IGNORECASE)
-RECORD_START_RE = re.compile(r"^\s*type\s+([A-Za-z]\w*)\s+is\s+record\b", re.IGNORECASE)
+TYPE_DECL_RE = re.compile(r"^\s*type\s+([A-Za-z]\w*)\s+is\b(.*)$", re.IGNORECASE)
 FIELD_RE = re.compile(r"^\s*([A-Za-z]\w*)\s*:\s*([^;]+);")
-END_RECORD_RE = re.compile(r"\bend\s+record\b", re.IGNORECASE)
-ARRAY_DECL_RE = re.compile(
-    r"^\s*type\s+([A-Za-z]\w*)\s+is\s+array\s*\(([^)]*)\)\s*of\s+([^;]+);",
-    re.IGNORECASE,
-)
-ENUM_START_RE = re.compile(r"^\s*type\s+([A-Za-z]\w*)\s+is\s*\((.*)", re.IGNORECASE)
 ENUM_CLOSE_RE = re.compile(r"\)\s*;")
+ARRAY_BODY_RE = re.compile(
+    r"\bis\s+array\s*\((.*?)\)\s*of\s+(.+);",
+    re.IGNORECASE | re.DOTALL,
+)
+ENUM_BODY_RE = re.compile(r"\bis\s*\((.*)\)\s*;", re.IGNORECASE | re.DOTALL)
 
 
 class TypesProvider(Protocol):
@@ -105,6 +104,80 @@ class AdaSpecIndex:
             cleaned = cleaned[len(self.root) + 1 :]
         return cleaned
 
+    def _collect_type_block(self, lines: List[str], start_idx: int) -> tuple[str, int]:
+        block_lines: List[str] = []
+        record_seen = False
+        i = start_idx
+        while i < len(lines):
+            line = lines[i]
+            block_lines.append(line)
+            if not record_seen and re.search(r"\brecord\b", line, re.IGNORECASE):
+                record_seen = True
+            if record_seen:
+                if re.search(r"\bend\s+record\s*;", line, re.IGNORECASE):
+                    break
+            else:
+                if ";" in line:
+                    break
+            i += 1
+        return "\n".join(block_lines), i
+
+    def _parse_record_fields_block(
+        self, block: str, pkg_segments: List[str]
+    ) -> Optional[Dict[str, str]]:
+        if "null record" in block.lower():
+            return {}
+        match = re.search(r"\brecord\b(.*?)\bend\s+record", block, re.IGNORECASE | re.DOTALL)
+        if match is None:
+            return None
+        body = match.group(1)
+        fields: Dict[str, str] = {}
+        for line in body.splitlines():
+            cleaned = line.split("--", 1)[0].strip()
+            if not cleaned or cleaned.lower().startswith("null"):
+                continue
+            m_field = FIELD_RE.match(cleaned)
+            if not m_field:
+                continue
+            fname = m_field.group(1).strip()
+            ftype = m_field.group(2).strip()
+            if ftype.lower().startswith("aliased "):
+                ftype = ftype.split(None, 1)[1].strip()
+            fields[fname] = self._qualify_reference(pkg_segments, ftype)
+        if fields:
+            return fields
+        if "null record" in block.lower():
+            return {}
+        return None
+
+    def _parse_array_block(
+        self, block: str, pkg_segments: List[str]
+    ) -> Optional[Tuple[str, int]]:
+        match = ARRAY_BODY_RE.search(block)
+        if match is None:
+            return None
+        index_text = match.group(1)
+        component = match.group(2)
+        component = component.split("--", 1)[0].strip()
+        component = component.rstrip(";").strip()
+        component = self._qualify_reference(pkg_segments, component)
+        dimension = index_text.count(",") + 1 if index_text.strip() else 1
+        return component, dimension
+
+    def _parse_enum_block(self, block: str) -> Optional[Tuple[str, ...]]:
+        match = ENUM_BODY_RE.search(block)
+        if match is None:
+            return None
+        inner = match.group(1)
+        literals: List[str] = []
+        for part in inner.split(","):
+            lit = part.strip()
+            lit = lit.split("--", 1)[0].strip()
+            lit = lit.rstrip(")").rstrip(";").strip()
+            if lit:
+                literals.append(lit)
+        return tuple(literals) if literals else None
+
     def _parse(self) -> None:
         lines = self.text.splitlines()
         stack: List[str] = []
@@ -164,69 +237,38 @@ class AdaSpecIndex:
                 i += 1
                 continue
 
-            record_match = RECORD_START_RE.match(stripped)
-            if record_match:
-                type_name = record_match.group(1)
-                fields: Dict[str, str] = {}
-                j = i + 1
+            type_match = TYPE_DECL_RE.match(stripped)
+            if type_match:
+                type_name = type_match.group(1)
+                block, block_end = self._collect_type_block(lines, i)
                 current_segments = self._current_segments(stack)
-                while j < len(lines):
-                    inner = lines[j]
-                    if END_RECORD_RE.search(inner):
-                        break
-                    m_field = FIELD_RE.match(inner)
-                    if m_field:
-                        fname = m_field.group(1).strip()
-                        ftype = m_field.group(2).split("--", 1)[0].strip()
-                        if ftype.lower().startswith("aliased "):
-                            ftype = ftype.split(None, 1)[1].strip()
-                        fields[fname] = self._qualify_reference(current_segments, ftype)
-                    j += 1
                 key = self._qualified_name(stack, type_name)
-                if fields:
-                    self.records[key] = fields
-                    self.declared_types.add(key)
-                i = j + 1
-                continue
+                block_no_comments = "\n".join(line.split("--", 1)[0] for line in block.splitlines())
 
-            array_match = ARRAY_DECL_RE.match(stripped)
-            if array_match:
-                type_name = array_match.group(1)
-                index_text = array_match.group(2)
-                component = array_match.group(3)
-                key = self._qualified_name(stack, type_name)
-                qualified_component = self._qualify_reference(self._current_segments(stack), component)
-                self.arrays[key] = qualified_component
-                self.array_dims[key] = index_text.count(",") + 1 if index_text.strip() else 1
-                self.declared_types.add(key)
-                i += 1
-                continue
-
-            enum_match = ENUM_START_RE.match(stripped)
-            if enum_match:
-                type_name = enum_match.group(1)
-                rest = enum_match.group(2)
-                body_lines = [rest]
-                j = i
-                while not ENUM_CLOSE_RE.search(body_lines[-1]) and j + 1 < len(lines):
-                    j += 1
-                    body_lines.append(lines[j].strip())
-                combined = " ".join(body_lines)
-                body_match = re.search(r"\((.*)\)", combined, re.DOTALL)
-                inner = body_match.group(1) if body_match else combined
-                literals: List[str] = []
-                for part in inner.split(","):
-                    lit = part.strip()
-                    lit = lit.split("--", 1)[0].strip()
-                    lit = lit.rstrip(");")
-                    lit = lit.strip()
-                    if lit:
-                        literals.append(lit)
-                key = self._qualified_name(stack, type_name)
-                if literals:
-                    self.enums[key] = tuple(literals)
+                record_fields = self._parse_record_fields_block(block_no_comments, current_segments)
+                if record_fields is not None:
+                    self.records[key] = record_fields
                     self.declared_types.add(key)
-                i = j + 1
+                    i = block_end + 1
+                    continue
+
+                array_info = self._parse_array_block(block_no_comments, current_segments)
+                if array_info is not None:
+                    component, dimension = array_info
+                    self.arrays[key] = component
+                    self.array_dims[key] = dimension
+                    self.declared_types.add(key)
+                    i = block_end + 1
+                    continue
+
+                enum_literals = self._parse_enum_block(block_no_comments)
+                if enum_literals is not None:
+                    self.enums[key] = enum_literals
+                    self.declared_types.add(key)
+                    i = block_end + 1
+                    continue
+
+                i = block_end + 1
                 continue
 
             i += 1

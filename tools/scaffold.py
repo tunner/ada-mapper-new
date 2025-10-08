@@ -171,8 +171,14 @@ class MappingScaffolder:
 
     def _build_entry(self, req: MappingRequest) -> Tuple[Dict[str, object], List[MappingRequest]]:
         to_type = req.to_type.strip()
-        dest_fields = self.provider.get_record_fields("to", to_type) or {}
+        dest_fields_raw = self.provider.get_record_fields("to", to_type)
+        dest_fields = dest_fields_raw or {}
         dest_enum_literals = self.provider.get_enum_literals("to", to_type) or []
+
+        if dest_fields_raw is None and not dest_enum_literals:
+            raise ValueError(
+                f"Unable to scaffold mapping '{req.name}': destination type '{to_type}' is not a record or enum in destination specs"
+            )
 
         existing_fields = req.existing_fields or {}
 
@@ -208,8 +214,8 @@ class MappingScaffolder:
             return entry, []
 
         from_value = source_type if source_type else self._from_placeholder(to_type)
-        from_fields = self.provider.get_record_fields("from", source_type) if source_type else None
-        from_fields = from_fields or {}
+        from_fields_raw = self.provider.get_record_fields("from", source_type) if source_type else None
+        from_fields = from_fields_raw or {}
         from_lookup = {name.lower(): name for name in from_fields.keys()}
 
         fields: Dict[str, object] = {}
@@ -262,7 +268,14 @@ class MappingScaffolder:
             if isinstance(spec_value, str) and spec_value.upper() == DEFAULT_SENTINEL:
                 continue
 
-            if self.provider.get_record_fields("to", dest_mark):
+            src_mark_clean = src_mark.strip() if isinstance(src_mark, str) else None
+            src_record_fields = (
+                self.provider.get_record_fields("from", src_mark_clean)
+                if src_mark_clean
+                else None
+            )
+            dest_record_fields = self.provider.get_record_fields("to", dest_mark)
+            if dest_record_fields is not None:
                 nested_from_type = src_mark.strip() if src_mark else None
                 if nested_from_type and not self.provider.get_record_fields("from", nested_from_type):
                     nested_from_type = None
@@ -271,6 +284,10 @@ class MappingScaffolder:
                 nested_name = self._preferred_names.get(dest_mark) or self._default_name(dest_mark)
                 nested_requests.append(MappingRequest(name=nested_name, to_type=dest_mark, from_type=nested_from_type))
                 continue
+            if src_record_fields is not None:
+                raise ValueError(
+                    f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references destination type '{dest_mark}' which could not be parsed as a record"
+                )
 
             # Nested array mapping (focus on element records)
             elem_type = self.provider.get_array_element_type("to", dest_mark)
@@ -287,9 +304,15 @@ class MappingScaffolder:
                     nested_requests.append(
                         MappingRequest(name=nested_name, to_type=elem_type, from_type=src_elem_type)
                     )
+                continue
+            if src_mark_clean and self.provider.get_array_element_type("from", src_mark_clean):
+                raise ValueError(
+                    f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references destination array type '{dest_mark}' which could not be parsed"
+                )
 
             # Enum mapping scaffold
-            elif self.provider.get_enum_literals("to", dest_mark):
+            dest_enum = self.provider.get_enum_literals("to", dest_mark)
+            if dest_enum:
                 src_enum_type = None
                 if src_mark and self.provider.get_enum_literals("from", src_mark.strip()):
                     src_enum_type = src_mark.strip()
@@ -309,6 +332,11 @@ class MappingScaffolder:
                         existing_fields=nested_fields,
                     )
                 )
+                continue
+            if src_mark_clean and self.provider.get_enum_literals("from", src_mark_clean):
+                raise ValueError(
+                    f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references destination enum type '{dest_mark}' which could not be parsed"
+                )
 
         entry = {
             "name": self._preferred_names.get(to_type, req.name),
@@ -321,7 +349,8 @@ class MappingScaffolder:
     def _has_supported_type(self, domain: str, type_name: str) -> bool:
         if not type_name:
             return False
-        if self.provider.get_record_fields(domain, type_name):
+        record_fields = self.provider.get_record_fields(domain, type_name)
+        if record_fields is not None:
             return True
         if self.provider.get_array_element_type(domain, type_name):
             return True

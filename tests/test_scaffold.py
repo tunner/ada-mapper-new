@@ -184,3 +184,38 @@ end Types_To;
     assert foo["fields"]["Speed_North"] == "Speed_North"
     assert foo["fields"]["Speed_South"] == "Speed_South"
     assert foo["from"] == "Foo_To"
+
+
+def test_init_json_map_errors_when_type_missing(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src"
+    write(
+        src_dir / "types_from.ads",
+        """
+package Types_From is
+   type T_Position_From_GPS is record
+      Lat : Integer;
+   end record;
+end Types_From;
+""".strip(),
+    )
+    write(
+        src_dir / "types_to.ads",
+        """
+package Types_To is
+   -- intentionally missing T_Position_To_Station record definition
+end Types_To;
+""".strip(),
+    )
+
+    mappings_path = tmp_path / "mappings.json"
+    result = run_cli(
+        tmp_path,
+        [
+            str(mappings_path),
+            str(src_dir),
+            "--init-json-map",
+            "Position_From_GPS_To_Station:T_Position_From_GPS:T_Position_To_Station",
+        ],
+    )
+    assert result.returncode != 0
+    assert "destination type 'T_Position_To_Station'" in result.stderr

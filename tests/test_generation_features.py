@@ -63,6 +63,50 @@ end Types_To;
     assert "R(I) := I16 (A(I))" in body
 
 
+def test_multiline_record_definition(tmp_path: Path):
+    write(
+        tmp_path / "src/types_from.ads",
+        """
+package Types_From is
+   type Scalar is range -2147483648 .. 2147483647;
+   type Rec_From is
+      record
+         A : Scalar;
+         B : Scalar;
+      end record;
+end Types_From;
+""".strip(),
+    )
+    write(
+        tmp_path / "src/types_to.ads",
+        """
+package Types_To is
+   type Scalar is range -32768 .. 32767;
+   type Rec_To is
+      record
+         A : Scalar;
+         B : Scalar;
+      end record;
+end Types_To;
+""".strip(),
+    )
+    body = run_gen(
+        tmp_path,
+        {
+            "mappings": [
+                {
+                    "name": "Rec",
+                    "from": "Rec_From",
+                    "to": "Rec_To",
+                    "fields": {"A": "A", "B": "B"},
+                }
+            ]
+        },
+    )
+    assert "function Map (X : Types_From.Rec_From) return Types_To.Rec_To" in body
+    assert "A => Scalar (X.A)" in body
+
+
 def test_nested_record_mapping_delegation(tmp_path: Path):
     # Parent contains nested record; provide explicit inner mapping and expect delegation
     write(
@@ -239,4 +283,3 @@ end Types_To;
     assert "function Map (X : Types_From.Wrap_From) return Types_To.Pos_To" in body
     assert "X => I16 (X.P.X)" in body
     assert "Y => I16 (X.P.Y)" in body
-

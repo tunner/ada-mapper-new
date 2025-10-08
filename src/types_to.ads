@@ -57,7 +57,8 @@ package Types_To is
    type T_Satellite_Position_Routes is array (T_Satellite_Primary_Index range <>, T_Satellite_Secondary_Index range <>) of Telemetry.T_Position;
    subtype T_Satellite_Position_Routes_Window is T_Satellite_Position_Routes(1 .. 3, 1 .. 2);
 
-   type T_Position_To_Station is record
+   type T_Position_To_Station is 
+      record
       Lat               : T_Latitude_Count;
       Lon               : T_Longitude_Count;
       Speed             : Telemetry.T_Speed;
