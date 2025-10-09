@@ -268,6 +268,56 @@ end Types_To;
     assert entries["Record_To"]["fields"]["Items_Field"] == "Items_Field"
 
 
+def test_update_json_map_skips_type_family_mismatch(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src"
+    write(
+        src_dir / "types_from.ads",
+        """
+package Types_From is
+   type Speed_Scalar is Integer;
+   type Record_From is record
+      Speed : Speed_Scalar;
+   end record;
+end Types_From;
+""".strip(),
+    )
+    write(
+        src_dir / "types_to.ads",
+        """
+package Types_To is
+   type Speed_Rec is record
+      Value : Integer;
+   end record;
+   type Record_To is record
+      Speed : Speed_Rec;
+   end record;
+end Types_To;
+""".strip(),
+    )
+
+    mappings = {
+        "mappings": [
+            {
+                "name": "Record",
+                "from": "Record_From",
+                "to": "Record_To",
+                "fields": {
+                    "Speed": "Speed",
+                },
+            }
+        ]
+    }
+    mappings_path = tmp_path / "mappings.json"
+    mappings_path.write_text(json.dumps(mappings, indent=2))
+
+    result = run_cli(tmp_path, [str(mappings_path), str(src_dir), "--update-json-map"])
+    assert result.returncode == 0, result.stderr + result.stdout
+    data = json.loads(mappings_path.read_text())
+    record = {entry["to"]: entry for entry in data["mappings"]}["Record_To"]
+    # Because type families differ (record vs scalar), field remains placeholder
+    assert record["fields"]["Speed"].startswith("<")
+
+
 def test_init_json_map_errors_when_type_missing(tmp_path: Path) -> None:
     src_dir = tmp_path / "src"
     write(

@@ -243,6 +243,10 @@ class MappingScaffolder:
                     src_name = from_lookup.get(spec_clean.lower())
                     if src_name:
                         src_mark = from_fields.get(src_name)
+                        if not (src_mark and self._types_compatible(dest_mark, src_mark)):
+                            spec_value = None
+                            src_name = None
+                            src_mark = None
             elif isinstance(existing_spec, dict):
                 src_ref = existing_spec.get("from") or existing_spec.get("source") or existing_spec.get("path")
                 if isinstance(src_ref, str) and not self.is_placeholder(src_ref):
@@ -250,19 +254,29 @@ class MappingScaffolder:
                     src_name = from_lookup.get(src_ref.lower())
                     if src_name:
                         src_mark = from_fields.get(src_name)
+                        if not (src_mark and self._types_compatible(dest_mark, src_mark)):
+                            spec_value = None
+                            src_name = None
+                            src_mark = None
                 else:
                     existing_spec = None
             else:
                 if dest_name.lower() in from_lookup:
-                    src_name = from_lookup[dest_name.lower()]
-                    src_mark = from_fields.get(src_name)
-                    spec_value = src_name
+                    candidate = from_lookup[dest_name.lower()]
+                    candidate_mark = from_fields.get(candidate)
+                    if candidate_mark and self._types_compatible(dest_mark, candidate_mark):
+                        src_name = candidate
+                        src_mark = candidate_mark
+                        spec_value = candidate
 
             if spec_value is None:
                 if src_name is None and dest_name.lower() in from_lookup:
-                    src_name = from_lookup[dest_name.lower()]
-                    src_mark = from_fields.get(src_name)
-                    spec_value = src_name
+                    candidate = from_lookup[dest_name.lower()]
+                    candidate_mark = from_fields.get(candidate)
+                    if candidate_mark and self._types_compatible(dest_mark, candidate_mark):
+                        src_name = candidate
+                        src_mark = candidate_mark
+                        spec_value = candidate
                 if spec_value is None:
                     spec_value = self._field_placeholder(dest_name)
 
@@ -289,7 +303,11 @@ class MappingScaffolder:
                         raise ValueError(
                             f"Unable to scaffold mapping '{req.name}': field '{dest_name}' references unknown source path '{spec_value}'"
                         )
-                src_mark = resolved_type
+                if resolved_type and self._types_compatible(dest_mark, resolved_type):
+                    src_mark = resolved_type
+                else:
+                    spec_value = self._field_placeholder(dest_name)
+                    src_mark = None
 
             if isinstance(spec_value, str) and self.is_placeholder(spec_value):
                 suggestion = None
@@ -300,9 +318,12 @@ class MappingScaffolder:
                 if suggestion:
                     suggested_path, suggested_type = suggestion
                     resolved_type = self._resolve_path_type(source_type, suggested_path)
-                    if resolved_type:
+                    if resolved_type and self._types_compatible(dest_mark, resolved_type):
                         spec_value = suggested_path
                         src_mark = resolved_type
+                    else:
+                        spec_value = self._field_placeholder(dest_name)
+                        src_mark = None
 
             fields[dest_name] = spec_value
 
@@ -492,3 +513,30 @@ class MappingScaffolder:
             elif isinstance(value, dict):
                 return False
         return True
+
+    def _types_compatible(self, dest_mark: str, src_mark: Optional[str]) -> bool:
+        if not src_mark:
+            return False
+        dest_family = self._type_family("to", dest_mark)
+        src_family = self._type_family("from", src_mark)
+        if dest_family is None or src_family is None:
+            return False
+        if dest_family == src_family:
+            return True
+        if dest_family == "scalar" and src_family == "scalar":
+            return True
+        return False
+
+    def _type_family(self, domain: str, type_name: str) -> Optional[str]:
+        if not type_name:
+            return None
+        type_name = type_name.strip()
+        if not type_name:
+            return None
+        if self.provider.get_record_fields(domain, type_name) is not None:
+            return "record"
+        if self.provider.get_array_element_type(domain, type_name):
+            return "array"
+        if self.provider.get_enum_literals(domain, type_name):
+            return "enum"
+        return "scalar"
