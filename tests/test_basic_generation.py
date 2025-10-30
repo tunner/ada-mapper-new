@@ -133,6 +133,196 @@ end Types_To;
     assert "Trigger => Boolean (X.Trigger)" in body
 
 
+def test_source_record_with_aliased_scalar_field(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type T_Int32 is range -2147483648 .. 2147483647;
+   type Wrapper_From is record
+      Value : aliased T_Int32;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type T_Int16 is range -32768 .. 32767;
+   type Wrapper_To is record
+      Value : T_Int16;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Wrapper",
+                        "from": "Wrapper_From",
+                        "to": "Wrapper_To",
+                        "fields": {"Value": "Value"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Wrapper_From) return Types_To.Wrapper_To" in body
+    assert "Value => T_Int16 (X.Value)" in body
+
+
+def test_source_record_with_aliased_array_field(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Byte is range 0 .. 255;
+   type Payload_Array_From is array (0 .. 3) of Byte;
+   type Wrapper_From is record
+      Payload : aliased Payload_Array_From;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Byte_To is range 0 .. 255;
+   type Payload_Array_To is array (0 .. 3) of Byte_To;
+   type Wrapper_To is record
+      Payload : Payload_Array_To;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Wrapper",
+                        "from": "Wrapper_From",
+                        "to": "Wrapper_To",
+                        "fields": {"Payload": "Payload"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Wrapper_From) return Types_To.Wrapper_To" in body
+    assert "Payload => Map(X.Payload)" in body
+    assert "function Map (A : Types_From.Payload_Array_From) return Types_To.Payload_Array_To" in body
+    assert "R(I) := Byte_To (A(I));" in body
+
+
+def test_source_record_with_aliased_record_field(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Inner_From is record
+      Value : Integer;
+   end record;
+   type Wrapper_From is record
+      Inner : aliased Inner_From;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Inner_To is record
+      Value : Integer;
+   end record;
+   type Wrapper_To is record
+      Inner : Inner_To;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Inner",
+                        "from": "Inner_From",
+                        "to": "Inner_To",
+                        "fields": {"Value": "Value"},
+                    },
+                    {
+                        "name": "Wrapper",
+                        "from": "Wrapper_From",
+                        "to": "Wrapper_To",
+                        "fields": {"Inner": "Inner"},
+                    },
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Inner_From) return Types_To.Inner_To" in body
+    assert "Value => Integer (X.Value)" in body
+    assert "function Map (X : Types_From.Wrapper_From) return Types_To.Wrapper_To" in body
+    assert "Inner => Map(X.Inner)" in body
+
+
 def test_record_subtype_resolution(tmp_path: Path):
     src_dir = tmp_path / "src"
     types_from = src_dir / "types_from.ads"
