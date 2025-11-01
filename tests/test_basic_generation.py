@@ -323,6 +323,301 @@ end Types_To;
     assert "Inner => Map(X.Inner)" in body
 
 
+def test_record_multiple_component_declarations(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type I32 is range -2147483648 .. 2147483647;
+   type Multi_From is record
+      A, B : I32;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type I16 is range -32768 .. 32767;
+   type Multi_To is record
+      A, B : I16;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Multi",
+                        "from": "Multi_From",
+                        "to": "Multi_To",
+                        "fields": {"A": "A", "B": "B"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Multi_From) return Types_To.Multi_To" in body
+    assert "A => I16 (X.A)" in body
+    assert "B => I16 (X.B)" in body
+
+
+def test_record_component_with_default_expression(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Count_From is record
+      Value : Natural := 42;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Count_To is record
+      Value : Integer := 0;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Count",
+                        "from": "Count_From",
+                        "to": "Count_To",
+                        "fields": {"Value": "Value"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Count_From) return Types_To.Count_To" in body
+    assert "Value => Integer (X.Value)" in body
+    assert "Value => Integer := 0" not in body
+
+
+def test_record_constrained_scalar_component(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Angle_From is record
+      Degrees : Integer range 0 .. 360;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Angle_To is record
+      Degrees : Integer range 0 .. 360;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Angle",
+                        "from": "Angle_From",
+                        "to": "Angle_To",
+                        "fields": {"Degrees": "Degrees"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Angle_From) return Types_To.Angle_To" in body
+    assert "Degrees => Integer (X.Degrees)" in body
+    assert "range" not in body.split("Degrees =>", 1)[1].split(")", 1)[0]
+
+
+def test_record_derived_without_extension(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Base_From is record
+      X : Integer;
+      Y : Integer;
+   end record;
+   type Derived_From is new Base_From;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Base_To is record
+      X : Integer;
+      Y : Integer;
+   end record;
+   type Derived_To is new Base_To;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Derived",
+                        "from": "Derived_From",
+                        "to": "Derived_To",
+                        "fields": {"X": "X", "Y": "Y"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Derived_From) return Types_To.Derived_To" in body
+    assert "X => Integer (X.X)" in body
+    assert "Y => Integer (X.Y)" in body
+
+
+def test_record_access_component_mapping(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    types_from = src_dir / "types_from.ads"
+    types_to = src_dir / "types_to.ads"
+    mappings = tmp_path / "mappings.json"
+
+    write(
+        types_from,
+        """
+package Types_From is
+   type Payload is record
+      Value : Integer;
+   end record;
+   type Wrapper_From is record
+      Ref : not null access Payload;
+   end record;
+end Types_From;
+""".strip()
+    )
+
+    write(
+        types_to,
+        """
+package Types_To is
+   type Payload is record
+      Value : Integer;
+   end record;
+   type Wrapper_To is record
+      Ref : access Payload;
+   end record;
+end Types_To;
+""".strip()
+    )
+
+    mappings.write_text(
+        json.dumps(
+            {
+                "mappings": [
+                    {
+                        "name": "Wrapper",
+                        "from": "Wrapper_From",
+                        "to": "Wrapper_To",
+                        "fields": {"Ref": "Ref"},
+                    }
+                ]
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(Path("tools/gen_mapper.py")), str(mappings), str(src_dir)],
+        cwd=str(Path.cwd()),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    body = (src_dir / "position_mappers.adb").read_text()
+    assert "function Map (X : Types_From.Wrapper_From) return Types_To.Wrapper_To" in body
+    assert "Ref => X.Ref" in body
+
 def test_record_subtype_resolution(tmp_path: Path):
     src_dir = tmp_path / "src"
     types_from = src_dir / "types_from.ads"

@@ -160,6 +160,12 @@ class MapperGenerator:
             self.needed_enum_maps.add((src_t.strip(), dst_t.strip()))
             return f"Map({src_expr})", None
 
+        if dst_t:
+            lowered_dst = dst_t.lower()
+            lowered_dst = f" {lowered_dst} "
+            if " access " in lowered_dst:
+                return src_expr, None
+
         # Scalars: cast to destination type if available
         base = self._base_type(dst_t)
         cast_type = base if base else dst_t

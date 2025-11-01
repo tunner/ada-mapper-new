@@ -6,18 +6,18 @@ from typing import Optional, Dict, Protocol, List, Callable, Any, Tuple
 import re
 
 
-QUALIFIER_RE = re.compile(r"\b(?:aliased|not\s+null|access|constant)\b", re.IGNORECASE)
+QUALIFIER_RE = re.compile(r"\b(?:aliased|not\s+null|constant)\b", re.IGNORECASE)
 PACKAGE_START_RE = re.compile(r"^\s*package\s+([A-Za-z0-9_.]+)\s+is\b", re.IGNORECASE)
 PACKAGE_END_RE = re.compile(r"^\s*end\s+([A-Za-z0-9_.]+)?\s*;", re.IGNORECASE)
 SUBTYPE_RE = re.compile(r"^\s*subtype\s+([A-Za-z]\w*)\s+is\s+(.+?);", re.IGNORECASE)
 TYPE_DECL_RE = re.compile(r"^\s*type\s+([A-Za-z]\w*)\s+is\b(.*)$", re.IGNORECASE)
-FIELD_RE = re.compile(r"^\s*([A-Za-z]\w*)\s*:\s*([^;]+);")
 ENUM_CLOSE_RE = re.compile(r"\)\s*;")
 ARRAY_BODY_RE = re.compile(
     r"\bis\s+array\s*\((.*?)\)\s*of\s+(.+);",
     re.IGNORECASE | re.DOTALL,
 )
 ENUM_BODY_RE = re.compile(r"\bis\s*\((.*)\)\s*;", re.IGNORECASE | re.DOTALL)
+DERIVED_TYPE_RE = re.compile(r"\bis\s+new\s+(.+?);", re.IGNORECASE)
 
 
 class TypesProvider(Protocol):
@@ -67,6 +67,19 @@ class AdaSpecIndex:
         cleaned = QUALIFIER_RE.sub("", cleaned)
         cleaned = " ".join(cleaned.split())
         return cleaned.strip()
+
+    def _normalize_component_type(self, text: str) -> str:
+        candidate = text.strip()
+        if not candidate:
+            return candidate
+        if candidate.endswith(";"):
+            candidate = candidate[:-1].strip()
+        if ":=" in candidate:
+            candidate = candidate.split(":=", 1)[0].strip()
+        candidate = QUALIFIER_RE.sub(" ", candidate)
+        candidate = re.sub(r"\b(range|digits|delta|mod)\b.*", "", candidate, flags=re.IGNORECASE).strip()
+        candidate = " ".join(candidate.split())
+        return candidate
 
     def _qualify_name(self, base: str, pkg_segments: List[str]) -> str:
         base = base.strip()
@@ -136,14 +149,19 @@ class AdaSpecIndex:
             cleaned = line.split("--", 1)[0].strip()
             if not cleaned or cleaned.lower().startswith("null"):
                 continue
-            m_field = FIELD_RE.match(cleaned)
-            if not m_field:
+            if ":" not in cleaned:
                 continue
-            fname = m_field.group(1).strip()
-            ftype = m_field.group(2).strip()
-            if ftype.lower().startswith("aliased "):
-                ftype = ftype.split(None, 1)[1].strip()
-            fields[fname] = self._qualify_reference(pkg_segments, ftype)
+            names_part, type_part = cleaned.split(":", 1)
+            names = [name.strip() for name in names_part.split(",") if name.strip()]
+            if not names:
+                continue
+            ftype = type_part.strip()
+            if not ftype:
+                continue
+            ftype = self._normalize_component_type(ftype)
+            qualified = self._qualify_reference(pkg_segments, ftype)
+            for fname in names:
+                fields[fname] = qualified
         if fields:
             return fields
         if "null record" in block.lower():
@@ -252,24 +270,35 @@ class AdaSpecIndex:
                     i = block_end + 1
                     continue
 
-                array_info = self._parse_array_block(block_no_comments, current_segments)
-                if array_info is not None:
-                    component, dimension = array_info
-                    self.arrays[key] = component
-                    self.array_dims[key] = dimension
-                    self.declared_types.add(key)
-                    i = block_end + 1
-                    continue
-
-                enum_literals = self._parse_enum_block(block_no_comments)
-                if enum_literals is not None:
-                    self.enums[key] = enum_literals
-                    self.declared_types.add(key)
-                    i = block_end + 1
-                    continue
-
+            array_info = self._parse_array_block(block_no_comments, current_segments)
+            if array_info is not None:
+                component, dimension = array_info
+                self.arrays[key] = component
+                self.array_dims[key] = dimension
+                self.declared_types.add(key)
                 i = block_end + 1
                 continue
+
+            enum_literals = self._parse_enum_block(block_no_comments)
+            if enum_literals is not None:
+                self.enums[key] = enum_literals
+                self.declared_types.add(key)
+                i = block_end + 1
+                continue
+
+            if "record" not in block_no_comments.lower():
+                derived_match = DERIVED_TYPE_RE.search(block_no_comments)
+                if derived_match:
+                    base_expr = derived_match.group(1).strip()
+                    base_expr = self._normalize_component_type(base_expr)
+                    qualified = self._qualify_reference(current_segments, base_expr)
+                    self.subtypes[key] = qualified
+                    self.declared_types.add(key)
+                    i = block_end + 1
+                    continue
+
+            i = block_end + 1
+            continue
 
             i += 1
 
